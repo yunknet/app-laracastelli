@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN:?Defina APP_ORIGIN com o dominio HTTPS}
+      TRUST_PROXY: '1'
+      HOST: 0.0.0.0
+      PORT: '5190'
+      DB_PATH: /app/data/lara.sqlite
+    ports:
+      - '127.0.0.1:5190:5190'
+    volumes:
+      - lara_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  lara_data:

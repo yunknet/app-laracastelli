@@ -1,0 +1,2 @@
+/* System fallbacks keep the app independent of external font providers. */
+@font-face{font-family:Manrope;src:local('Manrope');font-display:swap}
