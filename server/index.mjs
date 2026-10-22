@@ -34,6 +34,81 @@ app.use(helmet({
 app.use('/api/photos', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use('/api', rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }));
+// Webhook de checkout automático (Hotmart, Kiwify, Eduzz, Stripe, Kirvano, etc.)
+app.post('/api/webhook/checkout', express.json(), async (req, res) => {
+  try {
+    const authHeader = req.get('x-webhook-token') || req.query.token;
+    const expectedSecret = process.env.WEBHOOK_SECRET || 'lara_secret_webhook_token';
+    if (authHeader && authHeader !== expectedSecret) {
+      return res.status(401).json({ error: 'Token de webhook inválido.' });
+    }
+
+    const body = req.body || {};
+    const email = (
+      body.email ||
+      body.data?.buyer?.email ||
+      body.buyer?.email ||
+      body.customer?.email ||
+      body.data?.customer?.email ||
+      body.client?.email ||
+      ''
+    ).toLowerCase().trim();
+
+    const name = (
+      body.name ||
+      body.data?.buyer?.name ||
+      body.buyer?.name ||
+      body.customer?.name ||
+      body.data?.customer?.name ||
+      body.client?.name ||
+      'Aluna Lara Castelli'
+    ).trim();
+
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      return res.status(400).json({ error: 'E-mail do comprador não encontrado ou inválido no payload.' });
+    }
+
+    const existing = await db.get('SELECT id, email, active FROM users WHERE email=?', email);
+    if (existing) {
+      if (!existing.active) {
+        await db.run('UPDATE users SET active=1 WHERE id=?', existing.id);
+      }
+      return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: existing.id });
+    }
+
+    const tempPassword = 'Lara@' + randomBytes(4).toString('hex') + '!';
+    const userId = randomUUID();
+    const hash = await passwordHash(tempPassword);
+
+    await db.run(
+      'INSERT INTO users(id, name, email, password, role, active) VALUES(?,?,?,?,?,1)',
+      userId,
+      name,
+      email,
+      hash,
+      'member'
+    );
+
+    await db.run(
+      'INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO NOTHING',
+      userId,
+      JSON.stringify({ profile: { name, goal: 'Emagrecer', frequency: 4, level: 'Iniciante' } })
+    );
+
+    console.log(`[Webhook Checkout] Nova aluna cadastrada com sucesso: ${email} (${name})`);
+    res.status(201).json({
+      ok: true,
+      message: 'Aluna criada com sucesso.',
+      userId,
+      email,
+      temporaryPassword: tempPassword
+    });
+  } catch (err) {
+    console.error('[Webhook Checkout Error]:', err);
+    res.status(500).json({ error: 'Erro ao processar liberação de acesso.' });
+  }
+});
+
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('origin') !== origin) {
