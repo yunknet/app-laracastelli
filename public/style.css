@@ -23,11 +23,33 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.5; }
-button, input, select, textarea { font: inherit; color: inherit; }
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.5;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+input, textarea {
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+button, input, select, textarea { font: inherit; color: inherit; touch-action: manipulation; }
 button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; cursor: pointer; text-decoration: none; }
 button { border: none; background: none; }
 img, video { max-width: 100%; display: block; }
+
+/* Previne auto-zoom no iOS Safari (mínimo 16px) */
+input, select, textarea, .field input, .field select, .field textarea {
+  font-size: 16px !important;
+}
 
 /* Acessibilidade */
 .skip { position: fixed; top: -60px; left: 16px; z-index: 100; background: var(--white); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); }
@@ -668,15 +690,25 @@ svg.icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-w
 .bottomnav {
   display: none;
   position: fixed;
-  inset: auto 0 0;
-  height: 64px;
-  background: rgba(255, 255, 255, 0.94);
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 60px;
+  height: calc(60px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--line);
-  z-index: 50;
+  z-index: 9999;
+  box-shadow: 0 -3px 15px rgba(23, 59, 47, 0.06);
   justify-content: space-around;
-  align-items: center;
-  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  align-items: flex-start;
+  padding-top: 6px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 .bottomnav a {
   display: flex;
@@ -996,29 +1028,38 @@ dialog::backdrop { background: rgba(15, 33, 26, 0.7); backdrop-filter: blur(4px)
   .topbar { padding: 0 16px; height: 64px; }
   .mobile-brand { display: flex; }
   .top-title, .search, .user-pill div { display: none; }
-  .main { padding: 18px 16px 85px; }
-  .bottomnav { display: flex; }
+  .main { padding: 18px 16px calc(80px + env(safe-area-inset-bottom, 0px)) !important; }
+  .bottomnav {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    z-index: 9999 !important;
+  }
 
   /* Login Mobile */
   .login {
     grid-template-columns: 1fr;
-    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     background: var(--paper);
   }
 
   .login-art {
-    min-height: 220px;
-    height: 240px;
-    padding: 24px 20px;
+    min-height: 170px;
+    height: 190px;
+    padding: 22px 20px;
     flex-shrink: 0;
   }
 
   .login-art h1 {
-    font-size: 22px;
+    font-size: 20px;
     max-width: 100%;
-    margin-top: 14px;
+    margin-top: 12px;
   }
 
   .login-art p {
@@ -1026,6 +1067,15 @@ dialog::backdrop { background: rgba(15, 33, 26, 0.7); backdrop-filter: blur(4px)
   }
 
   .login-form {
+    padding: 26px 20px calc(36px + env(safe-area-inset-bottom, 0px));
+    flex: 1;
+    align-items: flex-start;
+    border-radius: 24px 24px 0 0;
+    margin-top: -24px;
+    position: relative;
+    z-index: 10;
+    box-shadow: 0 -12px 30px rgba(15, 38, 30, 0.08);
+  }
     padding: 32px 20px 48px;
     flex: 1;
     align-items: flex-start;
