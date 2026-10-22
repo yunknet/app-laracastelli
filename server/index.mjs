@@ -34,20 +34,24 @@ app.use(helmet({
 app.use('/api/photos', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use('/api', rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }));
-// Webhook de checkout automático (Hotmart, Kiwify, Eduzz, Stripe, Kirvano, etc.)
-app.post('/api/webhook/checkout', express.json(), async (req, res) => {
+// Webhook automático Lastlink, Hotmart, Kiwify, Eduzz, Stripe, etc.
+const webhookHandler = async (req, res) => {
   try {
-    const authHeader = req.get('x-webhook-token') || req.query.token;
-    const expectedSecret = process.env.WEBHOOK_SECRET || 'lara_secret_webhook_token';
-    if (authHeader && authHeader !== expectedSecret) {
+    const authHeader = req.get('x-webhook-token') || req.get('x-lastlink-token') || req.query.token;
+    const expectedSecret = process.env.WEBHOOK_SECRET || process.env.LASTLINK_TOKEN;
+    if (expectedSecret && authHeader && authHeader !== expectedSecret) {
       return res.status(401).json({ error: 'Token de webhook inválido.' });
     }
 
     const body = req.body || {};
+    const event = body.Event || body.event || 'purchase';
+
+    // Extração flexível de e-mail e nome (suporta Lastlink, Hotmart, Kiwify, Stripe, etc.)
     const email = (
-      body.email ||
-      body.data?.buyer?.email ||
+      body.Data?.Buyer?.Email ||
       body.buyer?.email ||
+      body.data?.buyer?.email ||
+      body.email ||
       body.customer?.email ||
       body.data?.customer?.email ||
       body.client?.email ||
@@ -55,9 +59,10 @@ app.post('/api/webhook/checkout', express.json(), async (req, res) => {
     ).toLowerCase().trim();
 
     const name = (
-      body.name ||
-      body.data?.buyer?.name ||
+      body.Data?.Buyer?.Name ||
       body.buyer?.name ||
+      body.data?.buyer?.name ||
+      body.name ||
       body.customer?.name ||
       body.data?.customer?.name ||
       body.client?.name ||
@@ -65,10 +70,26 @@ app.post('/api/webhook/checkout', express.json(), async (req, res) => {
     ).trim();
 
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
-      return res.status(400).json({ error: 'E-mail do comprador não encontrado ou inválido no payload.' });
+      return res.status(400).json({ error: 'E-mail não encontrado ou inválido no payload.' });
     }
 
+    // Tratamento de cancelamento / reembolso (Lastlink: Payment_Refund, Payment_Chargeback)
+    const isRevoke = /refund|chargeback|cancel|expired|reembolso/i.test(event);
+    if (isRevoke) {
+      const existing = await db.get('SELECT id FROM users WHERE email=?', email);
+      if (existing) {
+        await db.run('UPDATE users SET active=0 WHERE id=?', existing.id);
+        await db.run('DELETE FROM sessions WHERE user_id=?', existing.id);
+        console.log(`[Webhook] Acesso revogado/reembolsado: ${email}`);
+      }
+      return res.json({ ok: true, message: 'Acesso revogado com sucesso.', email });
+    }
+
+    // Aprovação de compra / ativação de aluna
+    const defaultPassword = process.env.LASTLINK_DEFAULT_PASSWORD || 'laramiva';
+    const passwordToUse = body.password || defaultPassword;
     const existing = await db.get('SELECT id, email, active FROM users WHERE email=?', email);
+
     if (existing) {
       if (!existing.active) {
         await db.run('UPDATE users SET active=1 WHERE id=?', existing.id);
@@ -76,9 +97,8 @@ app.post('/api/webhook/checkout', express.json(), async (req, res) => {
       return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: existing.id });
     }
 
-    const tempPassword = 'Lara@' + randomBytes(4).toString('hex') + '!';
     const userId = randomUUID();
-    const hash = await passwordHash(tempPassword);
+    const hash = await passwordHash(passwordToUse);
 
     await db.run(
       'INSERT INTO users(id, name, email, password, role, active) VALUES(?,?,?,?,?,1)',
@@ -95,19 +115,24 @@ app.post('/api/webhook/checkout', express.json(), async (req, res) => {
       JSON.stringify({ profile: { name, goal: 'Emagrecer', frequency: 4, level: 'Iniciante' } })
     );
 
-    console.log(`[Webhook Checkout] Nova aluna cadastrada com sucesso: ${email} (${name})`);
+    console.log(`[Webhook] Nova aluna cadastrada com sucesso: ${email} (${name})`);
     res.status(201).json({
       ok: true,
       message: 'Aluna criada com sucesso.',
       userId,
       email,
-      temporaryPassword: tempPassword
+      temporaryPassword: passwordToUse
     });
   } catch (err) {
-    console.error('[Webhook Checkout Error]:', err);
+    console.error('[Webhook Error]:', err);
     res.status(500).json({ error: 'Erro ao processar liberação de acesso.' });
   }
-});
+};
+
+app.post('/api/webhook/checkout', express.json(), webhookHandler);
+app.post('/api/webhook/lastlink', express.json(), webhookHandler);
+app.post('/webhook/lastlink', express.json(), webhookHandler);
+app.post('/webhook/lastlink/:secret', express.json(), webhookHandler);
 
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
@@ -402,7 +427,7 @@ app.get('/api/admin/users', auth, admin, async (req, res, next) => {
 app.post('/api/admin/users', auth, admin, async (req, res, next) => {
   try {
     const name = text(req.body.name, 100), email = text(req.body.email).toLowerCase(), password = text(req.body.password, 200);
-    if (!name || !/^\S+@\S+\.\S+$/.test(email) || password.length < 12) return fail(res, 'Informe nome, e-mail válido e senha com 12 caracteres ou mais.');
+    if (!name || !/^\S+@\S+\.\S+$/.test(email) || password.length < 6) return fail(res, 'Informe nome, e-mail válido e senha com 6 caracteres ou mais.');
     if (await db.get('SELECT 1 FROM users WHERE email=?', email)) return res.status(409).json({ error: 'E-mail já cadastrado.' });
     await db.run('INSERT INTO users(id, name, email, password, role) VALUES(?,?,?,?)', randomUUID(), name, email, await passwordHash(password));
     res.status(201).json({ ok: true });
@@ -418,7 +443,7 @@ app.put('/api/admin/users/:id', auth, admin, async (req, res, next) => {
     if (!user) return res.sendStatus(404);
     if (typeof req.body.active === 'boolean') await db.run('UPDATE users SET active=? WHERE id=?', +req.body.active, req.params.id);
     if (req.body.password) {
-      if (typeof req.body.password !== 'string' || req.body.password.length < 12 || req.body.password.length > 200) return fail(res, 'Senha deve ter entre 12 e 200 caracteres.');
+      if (typeof req.body.password !== 'string' || req.body.password.length < 6 || req.body.password.length > 200) return fail(res, 'Senha deve ter entre 6 e 200 caracteres.');
       await db.run('UPDATE users SET password=? WHERE id=?', await passwordHash(req.body.password), req.params.id);
     }
     await db.run('DELETE FROM sessions WHERE user_id=?', req.params.id);

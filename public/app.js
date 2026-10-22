@@ -26,7 +26,9 @@ const paths = {
   logout: 'M9 3H3v18h6m5-15 6 6-6 6M8 12h12',
   settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2',
   camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
-  progress: 'm4 17 5-5 4 3 7-10M4 4v16h17'
+  progress: 'm4 17 5-5 4 3 7-10M4 4v16h17',
+  eye: 'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  'eye-off': 'M9.88 9.88a3 3 0 1 0 4.24 4.24M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M2 2l20 20'
 };
 
 const icon = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.book}"/></svg>`;
@@ -264,12 +266,10 @@ function renderLogin() {
           <p class="muted" style="font-size: 13px; margin-bottom: 24px;">Entre para acessar seus treinos e fichas.</p>
           <form data-form="login">
             ${formField('Seu e-mail de compra', 'email', 'email', '', 'required autocomplete="username" placeholder="seuemail@exemplo.com"')}
-            ${formField('Sua senha', 'password', 'password', '', 'required autocomplete="current-password" placeholder="••••••••••••"')}
+            ${formField('Sua senha', 'password', 'password', '', 'required autocomplete="current-password" placeholder="Sua senha de acesso"')}
             <p class="error" id="login-error"></p>
             <button class="btn full" type="submit">Entrar no app ${icon('arrow')}</button>
           </form>
-          <div class="divider">ou experimente a plataforma</div>
-          <button class="btn light full" data-action="demo">Explorar demonstração ${icon('arrow')}</button>
         </div>
       </section>
     </div>
@@ -277,6 +277,19 @@ function renderLogin() {
 }
 
 function formField(label, name, type = 'text', value = '', extra = '') {
+  if (type === 'password') {
+    return `
+      <label class="field password-field">
+        <span>${label}</span>
+        <div class="password-wrap">
+          <input name="${name}" type="password" value="${esc(value)}" ${extra}>
+          <button type="button" class="btn-toggle-pw" data-action="toggle-pw" aria-label="Mostrar ou ocultar senha">
+            ${icon('eye')}
+          </button>
+        </div>
+      </label>
+    `;
+  }
   return `<label class="field"><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;
 }
 
@@ -1308,6 +1321,18 @@ document.addEventListener('click', async event => {
         showPhotos();
         toast('Foto excluída.');
         break;
+
+      case 'toggle-pw': {
+        const btn = event.target.closest('.btn-toggle-pw');
+        if (!btn) break;
+        const wrap = btn.closest('.password-wrap');
+        const input = wrap?.querySelector('input');
+        if (!input) break;
+        const isPw = input.type === 'password';
+        input.type = isPw ? 'text' : 'password';
+        btn.innerHTML = icon(isPw ? 'eye-off' : 'eye');
+        break;
+      }
 
       case 'close-modal':
         $('#modal').close();
