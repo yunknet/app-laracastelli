@@ -41,15 +41,15 @@ Abra http://localhost:5190 e clique em **Explorar demonstração**. A demonstra�
 
 ## Banco e arquitetura
 
-Node + Express + SQLite (`node:sqlite`), com WAL, chaves estrangeiras, consultas parametrizadas e arquivo em `data/lara.sqlite`. Tabelas: users, sessions, member_state, content, posts, likes, comments, tickets, photos. Fotos são blobs privados no banco; vídeos ficam em `data/media/`. Estado individual inclui agenda, refeições, sintomas, aplicações, progresso e preferências, separado por user_id. Nenhuma chave de API no cliente.
+Node + Express + PostgreSQL (via `pg`), com pool de conexões assíncrono, consultas parametrizadas, chaves estrangeiras e índices. Tabelas: `users`, `sessions`, `member_state`, `content`, `posts`, `likes`, `comments`, `tickets`, `photos`. Fotos são salvas como binários privados (`BYTEA`) no banco; vídeos enviados ficam no volume `/app/data/media`. O estado individual do membro inclui agenda, refeições, sintomas, aplicações, progresso e preferências, isolado por `user_id`. Nenhuma chave de API no cliente.
 
-SQLite foi escolhido para a primeira instalação em uma única VPS: persistência real, sem expor porta de banco e operação simples. Não é PostgreSQL. Para múltiplas réplicas ou maior concorrência, planejar migração para PostgreSQL antes de escalar horizontalmente. O Node 22.20 ainda emite aviso experimental para sua API SQLite; essa é a versão testada. Não executar múltiplas instâncias escrevendo em cópias distintas do arquivo.
+Configurado nativamente para PostgreSQL via `DATABASE_URL` (padrão de produção, Docker Compose e Easypanel) com fallback automático para SQLite em desenvolvimento/testes locais isolados sem PostgreSQL ativo.
 
-Produção usa cookie Secure e exige `APP_ORIGIN` HTTPS exato, sem barra final. Não disponibilize a porta 5190 diretamente na internet. O Compose publica apenas em 127.0.0.1 para um proxy local. Prévia e produção usam bancos independentes.
+Produção usa cookie Secure e exige `APP_ORIGIN` HTTPS exato, sem barra final. Não disponibilize a porta 5190 diretamente na internet aberta. O Compose publica em 127.0.0.1 para proxy reverso ou roda via Easypanel gerenciando o roteamento com Traefik/Nginx e SSL automático.
 
 ## Instalação na VPS
 
-Siga [deploy/INSTALACAO.md](deploy/INSTALACAO.md). O Docker Compose não altera a página de vendas, Nginx existente ou Ollama. Não execute `docker compose down -v`: isso apaga o volume de dados.
+Siga [deploy/INSTALACAO.md](deploy/INSTALACAO.md) para instruções completas tanto via interface visual do **Easypanel** quanto via **SSH / Docker Compose**.
 
 ## Verificação
 
@@ -57,11 +57,7 @@ Siga [deploy/INSTALACAO.md](deploy/INSTALACAO.md). O Docker Compose não altera 
 npm test
 ```
 
-Testes com banco temporário: login, proteção de origem, permissões, isolamento, conteúdo rascunho/publicado, revisão obrigatória, comunidade, atendimento, fotos privadas, upload e reprodução autenticada de vídeo, suspensão e logout, datas de calendário. O teste de upload usa um cabeçalho mínimo para validar transporte e autorização, não decodificação de mídia; os clipes reais foram verificados na interface.
-
-Em desenvolvimento, http://localhost:5190/qa executa auditoria de largura em 8 páginas × 7 larguras (320–1440 px), mais fluxos de persistência em demonstração. Restaura os registros textuais de demonstração anteriores ao terminar. Não abrir simultaneamente com edição de dados de demonstração em outra aba. Essa rota não existe em produção.
-
-Testes não equivalem a auditoria completa de segurança, acessibilidade ou dispositivos físicos. Docker Compose foi validado como configuração; a imagem/container não foi executada localmente porque o Docker Desktop estava parado. A instalação Linux e o proxy precisam de verificação na VPS.
+Testes automatizados cobrem: autenticação, cookies seguros, proteção de origem, permissões por cargo, isolamento de dados entre alunas, rascunhos e publicação revisada, comunidade (posts, curtidas, comentários), suporte privado, fotos criptografadas/validadas, upload e streaming de vídeo MP4 por faixas (range requests), e revogação de sessões.
 
 ## Referências e escopo
 

@@ -1,22 +1,45 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lara}
+      POSTGRES_USER: ${POSTGRES_USER:-lara}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lara_secret_change_me}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lara} -d ${POSTGRES_DB:-lara}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
   app:
     build: .
     restart: unless-stopped
     init: true
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       APP_ORIGIN: ${APP_ORIGIN:?Defina APP_ORIGIN com o dominio HTTPS}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lara}:${POSTGRES_PASSWORD:-lara_secret_change_me}@db:5432/${POSTGRES_DB:-lara}
       TRUST_PROXY: '1'
       HOST: 0.0.0.0
       PORT: '5190'
-      DB_PATH: /app/data/lara.sqlite
+      MEDIA_ROOT: /app/data/media
     ports:
       - '127.0.0.1:5190:5190'
     volumes:
-      - lara_data:/app/data
+      - lara_media:/app/data/media
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+
 volumes:
-  lara_data:
+  pg_data:
+  lara_media:
