@@ -24,7 +24,9 @@ const paths = {
   close: 'm6 6 12 12M6 18 18 6',
   plus: 'M12 4v16M4 12h16',
   logout: 'M9 3H3v18h6m5-15 6 6-6 6M8 12h12',
-  settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2'
+  settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2',
+  camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  progress: 'm4 17 5-5 4 3 7-10M4 4v16h17'
 };
 
 const icon = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.book}"/></svg>`;
@@ -224,6 +226,7 @@ function render() {
   `;
 
   if (page === 'community') refreshPosts();
+  if (page === 'care') refreshTickets();
   if (page === 'admin') refreshAdmin();
 }
 
@@ -234,6 +237,8 @@ function pageTitle() {
     case 'ficha': return 'Ficha Interativa';
     case 'workout': return 'Player de Treino';
     case 'food': return 'Alimentação';
+    case 'progress': return 'Minha Evolução';
+    case 'care': return 'Espaço da Aluna';
     case 'community': return 'Comunidade';
     case 'profile': return 'Meu Perfil';
     case 'admin': return 'Administração';
@@ -282,6 +287,8 @@ function pageContent() {
     case 'ficha': return fichaView();
     case 'workout': return workoutPlayerView();
     case 'food': return foodView();
+    case 'progress': return progressView();
+    case 'care': return careView();
     case 'community': return communityView();
     case 'notifications': return notificationsView();
     case 'profile': return profileView();
@@ -817,6 +824,169 @@ function profileView() {
   `;
 }
 
+function progressView() {
+  const completedCount = state.completed?.length || 0;
+  const totalWater = Object.values(state.water || {}).reduce((a, b) => a + b, 0);
+
+  return `
+    <div style="margin-bottom: 24px;">
+      <h1 style="font-size: 24px; font-weight: 800;">Minha Evolução & Progresso</h1>
+      <p style="font-size: 13px; color: var(--muted); margin-top: 4px;">Acompanhe sua transformação física, registros e fotos.</p>
+    </div>
+
+    <div class="quick-row" style="margin-bottom: 24px;">
+      <div class="quick-card">
+        <span class="quick-sub">Total de Treinos</span>
+        <strong class="quick-val">${completedCount} concluídos</strong>
+      </div>
+      <div class="quick-card">
+        <span class="quick-sub">Água Ingerida</span>
+        <strong class="quick-val">${(totalWater / 1000).toFixed(1)} Litros</strong>
+      </div>
+      <div class="quick-card">
+        <span class="quick-sub">Frequência Atual</span>
+        <strong class="quick-val">${state.profile.frequency || 4}x por semana</strong>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 style="font-size: 16px; font-weight: 800;">Galeria de Evolução Privada</h3>
+          <p style="font-size: 12px; color: var(--muted);">Suas fotos antes/depois ficam 100% privadas na sua conta.</p>
+        </div>
+        <button class="btn" data-action="open-photos">
+          ${icon('camera')} Gerenciar Fotos
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 12px;">Histórico de Check-ins</h3>
+      ${state.checkins?.length ? `
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${state.checkins.slice().reverse().map(c => `
+            <div style="padding: 12px; background: var(--paper); border-radius: 8px; font-size: 13px;">
+              <div style="display: flex; justify-content: space-between; font-weight: 700;">
+                <span>${niceDate(c.date)}</span>
+                <span style="color: var(--green);">${c.weight ? c.weight + ' kg' : ''}</span>
+              </div>
+              ${c.note ? `<p style="color: var(--muted); margin-top: 4px;">${esc(c.note)}</p>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      ` : `
+        <p style="font-size: 13px; color: var(--muted);">Nenhum check-in registrado ainda. Clique em Check-in na página inicial para começar.</p>
+      `}
+    </div>
+  `;
+}
+
+function careView() {
+  return `
+    <div style="margin-bottom: 24px;">
+      <h1 style="font-size: 24px; font-weight: 800;">Espaço da Aluna & Dúvidas</h1>
+      <p style="font-size: 13px; color: var(--muted); margin-top: 4px;">Envie perguntas sobre adaptações dos treinos e orientações de rotina.</p>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 12px;">Falar com a Equipe Dra. Lara Castelli</h3>
+      <form data-form="ticket">
+        <label class="field">
+          <span>Sua dúvida ou mensagem</span>
+          <textarea name="body" required rows="3" placeholder="Ex: Sinto um pouco de enjoo no dia seguinte da aplicação da caneta. Devo treinar mais leve?" style="width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 13px;"></textarea>
+        </label>
+        <button class="btn" style="margin-top: 8px;">Enviar Mensagem</button>
+      </form>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 16px;">Minhas Mensagens</h3>
+      <div id="tickets-list">
+        <div class="empty"><h3>Carregando mensagens...</h3></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 12px;">Orientações Rápidas & FAQ</h3>
+      <div style="display: flex; flex-direction: column; gap: 14px; font-size: 13px; line-height: 1.6; color: var(--ink);">
+        <div>
+          <strong>• Treino no dia da aplicação da caneta:</strong>
+          <p style="color: var(--muted);">Priorize treinos de menor impacto ou mobilidade (como o Bônus de Mobilidade) caso sinta fadiga nas primeiras 24 horas.</p>
+        </div>
+        <div>
+          <strong>• Hidratação obrigatória:</strong>
+          <p style="color: var(--muted);">A perda rápida de peso requer ingestão mínima de 35ml a 40ml de água por quilo de peso corporal para proteger os rins e manter a elasticidade da pele.</p>
+        </div>
+        <div>
+          <strong>• Consumo de proteínas:</strong>
+          <p style="color: var(--muted);">Para não perder massa muscular (flacidez pós-caneta), garanta pelo menos 1,6g de proteína por kg ao longo do dia.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function refreshTickets() {
+  try {
+    tickets = demo ? JSON.parse(localStorage.getItem('lara-demo-tickets') || '[]') : await api('/tickets');
+    const container = $('#tickets-list');
+    if (!container) return;
+    if (!tickets.length) {
+      container.innerHTML = `<div class="empty"><h3>Nenhuma mensagem ainda</h3><p>Envie sua primeira dúvida acima para a nossa equipe.</p></div>`;
+      return;
+    }
+    container.innerHTML = tickets.map(t => `
+      <div class="card" style="margin-bottom: 12px; padding: 16px; background: var(--paper);">
+        <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">${esc(t.body)}</p>
+        <small style="color: var(--muted);">${new Date(t.created_at || Date.now()).toLocaleDateString('pt-BR')}</small>
+        ${t.reply ? `
+          <div style="margin-top: 10px; padding: 12px; background: var(--lime-soft); border-radius: 8px; border-left: 3px solid var(--green);">
+            <strong style="font-size: 12px; color: var(--green); display: block; margin-bottom: 4px;">Resposta da Equipe Lara Castelli:</strong>
+            <p style="font-size: 12px; line-height: 1.5;">${esc(t.reply)}</p>
+          </div>
+        ` : `
+          <div style="margin-top: 8px;">
+            <span class="tag" style="font-size: 10px;">Aguardando resposta da Dra. Lara</span>
+          </div>
+        `}
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function showPhotos() {
+  photos = demo ? JSON.parse(localStorage.getItem('lara-demo-photos') || '[]') : await api('/photos');
+  showModal('Minha Evolução por Fotos', `
+    <p style="font-size: 12px; color: var(--muted); margin-bottom: 16px;">
+      ${demo ? 'Fotos de teste ficam apenas neste navegador.' : 'Fotos individuais são 100% privadas, acessíveis somente pela sua conta.'}
+      Formatos: JPEG, PNG ou WebP (até 4 MB).
+    </p>
+    <form data-form="photo" style="margin-bottom: 20px;">
+      <label class="field">
+        <span>Data da foto</span>
+        <input name="date" type="date" value="${today()}" max="${today()}" required>
+      </label>
+      <label class="field">
+        <span>Selecionar foto</span>
+        <input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required>
+      </label>
+      <button class="btn full" style="margin-top: 10px;">Guardar Foto</button>
+    </form>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px;">
+      ${photos.map(p => `
+        <div class="card" style="padding: 8px; text-align: center;">
+          <img src="${demo ? p.data : '/api/photos/' + p.id}" alt="Registro de ${esc(p.date)}" style="width: 100%; height: 130px; object-fit: cover; border-radius: 8px;">
+          <small style="display: block; margin: 6px 0; font-weight: 700;">${niceDate(p.date)}</small>
+          <button class="btn light" style="font-size: 10px; min-height: 28px; padding: 4px 8px; width: 100%;" data-action="remove-photo" data-id="${p.id}">Excluir</button>
+        </div>
+      `).join('')}
+    </div>
+  `);
+}
+
 function adminView() {
   if (user?.role !== 'admin') return `<div class="empty"><h3>Acesso restrito à administração.</h3></div>`;
   return `
@@ -1124,6 +1294,21 @@ document.addEventListener('click', async event => {
         toast('Status da aluna atualizado.');
         break;
 
+      case 'open-photos':
+        showPhotos();
+        break;
+
+      case 'remove-photo':
+        if (demo) {
+          photos = photos.filter(p => p.id !== id);
+          localStorage.setItem('lara-demo-photos', JSON.stringify(photos));
+        } else {
+          await api('/photos/' + id, 'DELETE');
+        }
+        showPhotos();
+        toast('Foto excluída.');
+        break;
+
       case 'close-modal':
         $('#modal').close();
         break;
@@ -1186,6 +1371,43 @@ document.addEventListener('submit', async event => {
         refreshPosts();
         toast('Publicado na comunidade!');
         break;
+      case 'ticket':
+        if (demo) {
+          tickets.unshift({
+            id: crypto.randomUUID(),
+            body: data.body,
+            reply: '',
+            created_at: new Date().toISOString()
+          });
+          localStorage.setItem('lara-demo-tickets', JSON.stringify(tickets));
+        } else {
+          await api('/tickets', 'POST', data);
+        }
+        form.reset();
+        refreshTickets();
+        toast('Mensagem enviada para a equipe!');
+        break;
+      case 'photo': {
+        const file = form.elements.photo.files[0];
+        if (!file || file.size > 4 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+          throw Error('Escolha JPEG, PNG ou WebP de até 4 MB.');
+        }
+        const dataUri = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+        if (demo) {
+          photos.unshift({ id: crypto.randomUUID(), date: form.elements.date.value, data: dataUri });
+          localStorage.setItem('lara-demo-photos', JSON.stringify(photos));
+        } else {
+          await api('/photos', 'POST', { date: form.elements.date.value, data: dataUri });
+        }
+        showPhotos();
+        toast('Foto guardada com sucesso!');
+        break;
+      }
       case 'search':
         search = data.q.trim();
         location.hash = 'search';
