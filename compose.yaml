@@ -35,6 +35,8 @@ services:
       - '127.0.0.1:5190:5190'
     volumes:
       - lara_media:/app/data/media
+      - ./server:/app/server
+      - ./public:/app/public
     security_opt:
       - no-new-privileges:true
     cap_drop:
