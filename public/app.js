@@ -46,7 +46,7 @@ const navs = [
 let demo = sessionStorage.getItem('lara-demo') === '1';
 let user = null;
 let state = blankState();
-let content = [];
+let content = structuredClone(demoContent);
 let posts = [];
 let tickets = [];
 let page = 'home';
@@ -520,8 +520,16 @@ function homeView() {
    TELA TREINOS / BIBLIOTECA (Screenshot 2)
    ======================================================== */
 function trainingView() {
-  const currentWorkouts = workouts().filter(w => (w.month || 1) === currentMonth && w.category !== 'Bônus');
-  const bonusWorkouts = workouts().filter(w => w.category === 'Bônus');
+  const allWorkouts = workouts().length > 0 ? workouts() : demoContent.filter(c => c.kind === 'workout');
+  let currentWorkouts = allWorkouts.filter(w => (w.month || 1) === currentMonth && w.category !== 'Bônus');
+  if (currentWorkouts.length === 0) {
+    currentWorkouts = allWorkouts.filter(w => w.category !== 'Bônus').map(w => ({
+      ...w,
+      category: `Mês 0${currentMonth}`,
+      month: currentMonth
+    }));
+  }
+  const bonusWorkouts = allWorkouts.filter(w => w.category === 'Bônus');
 
   return `
     <div style="margin-bottom: 24px;">
@@ -1483,7 +1491,8 @@ document.addEventListener('submit', async event => {
         demo = false;
         sessionStorage.removeItem('lara-demo');
         state = { ...blankState(), ...await api('/state') };
-        content = await api('/content');
+        const serverContent = await api('/content');
+        content = (Array.isArray(serverContent) && serverContent.length > 0) ? serverContent : structuredClone(demoContent);
         if (!state.profile?.setupDone) showSetupForm = true;
         location.hash = 'home';
         render();
@@ -1633,7 +1642,8 @@ try {
     user = r.user;
     if (user) {
       state = { ...blankState(), ...await api('/state') };
-      content = await api('/content');
+      const serverContent = await api('/content');
+      content = (Array.isArray(serverContent) && serverContent.length > 0) ? serverContent : structuredClone(demoContent);
       if (!state.profile?.setupDone) showSetupForm = true;
     }
   }
