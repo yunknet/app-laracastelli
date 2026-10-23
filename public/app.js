@@ -253,7 +253,7 @@ function renderLogin() {
   $('#app').innerHTML = `
     <div class="login">
       <section class="login-art">
-        <img src="/assets/rotina.png" alt="Lara Castelli">
+        <img src="/assets/login-bg.png" alt="Método Lara Castelli">
         ${brand()}
         <div class="copy">
           <h1>Defina seu corpo sem abrir mão da sua vida.</h1>
