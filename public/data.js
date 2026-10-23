@@ -216,7 +216,8 @@ export const blankState = () => ({
     level: 'Iniciante',
     goal: 'Emagrecer',
     week: 1,
-    waterGoal: 0
+    waterGoal: 0,
+    setupDone: false
   },
   completed: [],
   water: {},

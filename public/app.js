@@ -56,6 +56,7 @@ let currentMonth = 1;
 let currentWeek = 1;
 let search = '';
 let saveQueue = Promise.resolve();
+let showSetupForm = false;
 
 // Cronômetros de Treino e Descanso (Screenshots 3 e 4)
 let timerInterval = null;
@@ -351,13 +352,78 @@ function homeView() {
           <small>Água hoje <button data-action="quick-water" style="color:var(--green); font-weight:700; margin-left:6px;">+ 250ml</button></small>
         </div>
       </div>
-      <div class="quick-card">
+      <div class="quick-card" style="cursor: pointer;" data-action="toggle-setup-form" title="Clique para personalizar seu objetivo">
         <div class="quick-icon peach">${icon('heart')}</div>
         <div class="quick-info">
           <strong>${state.profile.goal || 'Emagrecer'}</strong>
-          <small>Foco do plano atual</small>
+          <small>Foco do plano • <u>Alterar</u></small>
         </div>
       </div>
+    </div>
+
+    <!-- Card de Personalização do Treino (Onboarding / Setup Visual) -->
+    <div class="card" style="margin-bottom: 24px; padding: 20px; background: #ffffff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--card-shadow);">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: ${showSetupForm ? '18px' : '0'}; flex-wrap: wrap;">
+        <div>
+          <span class="tag green" style="font-size: 10px; font-weight: 800; letter-spacing: 0.5px;">✦ SEU PLANO PERSONALIZADO</span>
+          <h2 style="font-size: 17px; font-weight: 800; margin-top: 4px; color: var(--ink);">Dados do seu Treino</h2>
+          <p style="font-size: 12px; color: var(--muted); margin-top: 2px;">Adapte o método ao seu objetivo e à sua rotina semanal.</p>
+        </div>
+        <button class="btn light" data-action="toggle-setup-form" style="font-size: 12px; padding: 6px 14px; min-height: 34px;">
+          ${showSetupForm ? 'Fechar ▲' : 'Personalizar ✎'}
+        </button>
+      </div>
+
+      ${showSetupForm ? `
+        <form data-form="setup-plan" style="display: flex; flex-direction: column; gap: 16px;">
+          <label class="field" style="margin-bottom: 0;">
+            <span style="font-size: 12px; font-weight: 700;">Como você quer ser chamada?</span>
+            <input name="name" type="text" value="${esc(name())}" required placeholder="Seu nome" style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); font-size: 13px; width: 100%;">
+          </label>
+
+          <div>
+            <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Objetivo Principal</span>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-pill-choice ${state.profile.goal === 'Emagrecer' ? 'active' : ''}" data-action="select-goal" data-val="Emagrecer">🔥 Emagrecer e Definir</button>
+              <button type="button" class="btn-pill-choice ${state.profile.goal === 'Massa Magra' ? 'active' : ''}" data-action="select-goal" data-val="Massa Magra">💪 Ganho de Massa Magra</button>
+              <button type="button" class="btn-pill-choice ${state.profile.goal === 'Criar rotina' ? 'active' : ''}" data-action="select-goal" data-val="Criar rotina">⚡ Criar Rotina Constante</button>
+            </div>
+          </div>
+
+          <div>
+            <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Nível de Treino</span>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-pill-choice ${state.profile.level === 'Iniciante' ? 'active' : ''}" data-action="select-level" data-val="Iniciante">🌱 Iniciante (voltando a treinar)</button>
+              <button type="button" class="btn-pill-choice ${state.profile.level === 'Intermediário' ? 'active' : ''}" data-action="select-level" data-val="Intermediário">🌿 Intermediário</button>
+              <button type="button" class="btn-pill-choice ${state.profile.level === 'Avançado' ? 'active' : ''}" data-action="select-level" data-val="Avançado">🌳 Avançado</button>
+            </div>
+          </div>
+
+          <div>
+            <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Frequência Semanal</span>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-pill-choice ${state.profile.frequency === 3 ? 'active' : ''}" data-action="select-freq" data-val="3">3 dias por semana</button>
+              <button type="button" class="btn-pill-choice ${state.profile.frequency === 4 ? 'active' : ''}" data-action="select-freq" data-val="4">4 dias por semana (Recomendado)</button>
+              <button type="button" class="btn-pill-choice ${state.profile.frequency === 5 ? 'active' : ''}" data-action="select-freq" data-val="5">5 dias por semana</button>
+              <button type="button" class="btn-pill-choice ${state.profile.frequency === 6 ? 'active' : ''}" data-action="select-freq" data-val="6">6 dias por semana</button>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+            <button class="btn" type="submit" style="min-height: 40px; font-size: 13px;">Salvar Meu Plano ✨</button>
+          </div>
+        </form>
+      ` : `
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--paper); padding: 10px 14px; border-radius: var(--radius-md); font-size: 12px;">
+          <span><b>Aluna:</b> ${esc(name())}</span>
+          <span style="color: var(--line);">•</span>
+          <span><b>Foco:</b> ${esc(state.profile.goal || 'Emagrecer')}</span>
+          <span style="color: var(--line);">•</span>
+          <span><b>Nível:</b> ${esc(state.profile.level || 'Iniciante')}</span>
+          <span style="color: var(--line);">•</span>
+          <span><b>Frequência:</b> ${state.profile.frequency || 4}x por semana</span>
+        </div>
+      `}
     </div>
 
     <!-- NETFLIX RAIL 1: Comece aqui (Screenshot 1) -->
@@ -794,35 +860,35 @@ function profileView() {
 
     <form data-form="profile" class="card" style="max-width: 600px; margin-bottom: 24px;">
       <h3 style="margin-bottom: 16px;">Seus Dados de Treino</h3>
-      ${formField('Como quer ser chamada?', 'name', 'text', name(), 'required')}
+      ${formField('Como quer ser chamada?', 'name', 'text', name(), 'required placeholder="Seu nome"')}
       
-      <label class="field">
-        <span>Objetivo principal</span>
-        <select name="goal">
-          <option value="Emagrecer" ${state.profile.goal === 'Emagrecer' ? 'selected' : ''}>Emagrecer e Definir</option>
-          <option value="Massa Magra" ${state.profile.goal === 'Massa Magra' ? 'selected' : ''}>Ganho de Massa Magra</option>
-          <option value="Criar rotina" ${state.profile.goal === 'Criar rotina' ? 'selected' : ''}>Criar uma rotina constante</option>
-        </select>
-      </label>
+      <div style="margin-bottom: 16px;">
+        <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Objetivo Principal</span>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-pill-choice ${state.profile.goal === 'Emagrecer' ? 'active' : ''}" data-action="select-goal" data-val="Emagrecer">🔥 Emagrecer e Definir</button>
+          <button type="button" class="btn-pill-choice ${state.profile.goal === 'Massa Magra' ? 'active' : ''}" data-action="select-goal" data-val="Massa Magra">💪 Ganho de Massa Magra</button>
+          <button type="button" class="btn-pill-choice ${state.profile.goal === 'Criar rotina' ? 'active' : ''}" data-action="select-goal" data-val="Criar rotina">⚡ Criar Rotina Constante</button>
+        </div>
+      </div>
 
-      <label class="field">
-        <span>Nível de treino</span>
-        <select name="level">
-          <option value="Iniciante" ${state.profile.level === 'Iniciante' ? 'selected' : ''}>Iniciante (voltando a treinar)</option>
-          <option value="Intermediário" ${state.profile.level === 'Intermediário' ? 'selected' : ''}>Intermediário</option>
-          <option value="Avançado" ${state.profile.level === 'Avançado' ? 'selected' : ''}>Avançado</option>
-        </select>
-      </label>
+      <div style="margin-bottom: 16px;">
+        <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Nível de Treino</span>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-pill-choice ${state.profile.level === 'Iniciante' ? 'active' : ''}" data-action="select-level" data-val="Iniciante">🌱 Iniciante (voltando a treinar)</button>
+          <button type="button" class="btn-pill-choice ${state.profile.level === 'Intermediário' ? 'active' : ''}" data-action="select-level" data-val="Intermediário">🌿 Intermediário</button>
+          <button type="button" class="btn-pill-choice ${state.profile.level === 'Avançado' ? 'active' : ''}" data-action="select-level" data-val="Avançado">🌳 Avançado</button>
+        </div>
+      </div>
 
-      <label class="field">
-        <span>Frequência semanal</span>
-        <select name="frequency">
-          <option value="3" ${state.profile.frequency === 3 ? 'selected' : ''}>3 dias por semana</option>
-          <option value="4" ${state.profile.frequency === 4 ? 'selected' : ''}>4 dias por semana (Recomendado)</option>
-          <option value="5" ${state.profile.frequency === 5 ? 'selected' : ''}>5 dias por semana</option>
-          <option value="6" ${state.profile.frequency === 6 ? 'selected' : ''}>6 dias por semana</option>
-        </select>
-      </label>
+      <div style="margin-bottom: 16px;">
+        <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Frequência Semanal</span>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-pill-choice ${state.profile.frequency === 3 ? 'active' : ''}" data-action="select-freq" data-val="3">3 dias por semana</button>
+          <button type="button" class="btn-pill-choice ${state.profile.frequency === 4 ? 'active' : ''}" data-action="select-freq" data-val="4">4 dias por semana (Recomendado)</button>
+          <button type="button" class="btn-pill-choice ${state.profile.frequency === 5 ? 'active' : ''}" data-action="select-freq" data-val="5">5 dias por semana</button>
+          <button type="button" class="btn-pill-choice ${state.profile.frequency === 6 ? 'active' : ''}" data-action="select-freq" data-val="6">6 dias por semana</button>
+        </div>
+      </div>
 
       <button class="btn" style="margin-top: 8px;">Salvar alterações</button>
     </form>
@@ -1175,6 +1241,26 @@ document.addEventListener('click', async event => {
         renderLogin();
         break;
 
+      case 'toggle-setup-form':
+        showSetupForm = !showSetupForm;
+        render();
+        break;
+
+      case 'select-goal':
+        state.profile.goal = b.dataset.val;
+        render();
+        break;
+
+      case 'select-level':
+        state.profile.level = b.dataset.val;
+        render();
+        break;
+
+      case 'select-freq':
+        state.profile.frequency = Number(b.dataset.val);
+        render();
+        break;
+
       case 'select-month':
         currentMonth = Number(id);
         location.hash = 'training';
@@ -1304,7 +1390,7 @@ document.addEventListener('click', async event => {
           <form data-form="admin-new-user">
             ${formField('Nome completo', 'name', 'text', '', 'required')}
             ${formField('E-mail da aluna', 'email', 'email', '', 'required')}
-            ${formField('Senha inicial (mínimo 12 caracteres)', 'password', 'text', 'LaraCastelli2026!', 'required minlength="12"')}
+            ${formField('Senha inicial (mínimo 6 caracteres)', 'password', 'text', 'metodolara', 'required minlength="6"')}
             <button class="btn full" style="margin-top: 14px;">Criar Acesso e Gerar Mensagem</button>
           </form>
         `);
@@ -1376,16 +1462,28 @@ document.addEventListener('submit', async event => {
         sessionStorage.removeItem('lara-demo');
         state = { ...blankState(), ...await api('/state') };
         content = await api('/content');
+        if (!state.profile?.setupDone) showSetupForm = true;
         location.hash = 'home';
         render();
         break;
       }
-      case 'profile':
-        state.profile = { ...state.profile, ...data, frequency: Number(data.frequency) };
+      case 'setup-plan':
+      case 'profile': {
+        const nameVal = form.elements.name?.value?.trim() || name();
+        state.profile = {
+          ...state.profile,
+          name: nameVal,
+          goal: state.profile.goal || 'Emagrecer',
+          level: state.profile.level || 'Iniciante',
+          frequency: Number(state.profile.frequency || 4),
+          setupDone: true
+        };
         await save();
-        toast('Preferências salvas com sucesso!');
+        showSetupForm = false;
+        toast('Plano e ficha adaptados com sucesso!');
         render();
         break;
+      }
       case 'change-password': {
         const newPassword = form.elements.newPassword?.value;
         if (!newPassword || newPassword.length < 6) {
@@ -1514,6 +1612,7 @@ try {
     if (user) {
       state = { ...blankState(), ...await api('/state') };
       content = await api('/content');
+      if (!state.profile?.setupDone) showSetupForm = true;
     }
   }
   render();
