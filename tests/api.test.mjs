@@ -157,3 +157,82 @@ test('suspension invalidates sessions and logout revokes tokens', async () => {
   await request('/logout', { method: 'POST', cookie: aliceCookie, body: {} });
   assert.equal((await request('/state', { cookie: aliceCookie })).status, 401);
 });
+
+test('member can update their own password and login with it', async () => {
+  // Login as bob again after reactivating
+  const users = (await request('/admin/users', { cookie: adminCookie })).body;
+  const bob = users.find(u => u.name === 'Bob');
+  await request('/admin/users/' + bob.id, { method: 'PUT', cookie: adminCookie, body: { active: true } });
+
+  const loginBefore = await request('/login', { method: 'POST', body: { email: 'bob@test.local', password: 'Test-password-123!' } });
+  assert.equal(loginBefore.status, 200);
+  const cookie = loginBefore.cookie.split(';')[0];
+
+  // Try updating with short password
+  const shortRes = await request('/me/password', { method: 'PUT', cookie, body: { newPassword: '123' } });
+  assert.equal(shortRes.status, 400);
+
+  // Update password successfully
+  const updateRes = await request('/me/password', { method: 'PUT', cookie, body: { newPassword: 'NovaSenhaForte2026!' } });
+  assert.equal(updateRes.status, 200);
+
+  // Old password should fail
+  const oldLogin = await request('/login', { method: 'POST', body: { email: 'bob@test.local', password: 'Test-password-123!' } });
+  assert.equal(oldLogin.status, 401);
+
+  // New password should succeed
+  const newLogin = await request('/login', { method: 'POST', body: { email: 'bob@test.local', password: 'NovaSenhaForte2026!' } });
+  assert.equal(newLogin.status, 200);
+});
+
+test('webhook generates firstName123456 password and provisions access', async () => {
+  // Simula webhook da Lastlink com payload de compra aprovada
+  const payload = {
+    Event: 'Payment_Approved',
+    Data: {
+      Buyer: {
+        Name: 'Maria Eduarda Silveira',
+        Email: 'maria.eduarda@exemplo.com'
+      }
+    }
+  };
+
+  const hookRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  assert.equal(hookRes.status, 201);
+  const data = await hookRes.json();
+  assert.equal(data.temporaryPassword, 'maria123456');
+
+  // Aluna deve conseguir logar usando o e-mail da compra e a senha maria123456
+  const loginRes = await request('/login', {
+    method: 'POST',
+    body: { email: 'maria.eduarda@exemplo.com', password: 'maria123456' }
+  });
+  assert.equal(loginRes.status, 200);
+
+  // Simula webhook de reembolso/cancelamento
+  const refundPayload = {
+    Event: 'Payment_Refund',
+    Data: {
+      Buyer: {
+        Email: 'maria.eduarda@exemplo.com'
+      }
+    }
+  };
+  const refundRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(refundPayload)
+  });
+  assert.equal(refundRes.status, 200);
+
+  // Após reembolso, login deve ser recusado
+  const afterRefundLogin = await request('/login', {
+    method: 'POST',
+    body: { email: 'maria.eduarda@exemplo.com', password: 'maria123456' }
+  });
+  assert.equal(afterRefundLogin.status, 401);
+});

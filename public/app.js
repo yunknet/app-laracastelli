@@ -827,6 +827,15 @@ function profileView() {
       <button class="btn" style="margin-top: 8px;">Salvar alterações</button>
     </form>
 
+    <form data-form="change-password" class="card" style="max-width: 600px; margin-bottom: 24px;">
+      <h3 style="margin-bottom: 12px;">Alterar Minha Senha</h3>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
+        Substitua a sua senha inicial por uma senha pessoal de sua preferência.
+      </p>
+      ${formField('Nova senha (mínimo 6 caracteres)', 'newPassword', 'password', '', 'required minlength="6" placeholder="Digite sua nova senha"')}
+      <button class="btn" style="margin-top: 8px;">Salvar Nova Senha</button>
+    </form>
+
     <div class="card" style="max-width: 600px;">
       <h3 style="margin-bottom: 12px;">Sua Conta</h3>
       <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">E-mail cadastrado: <b>${esc(user?.email || 'Demonstração')}</b></p>
@@ -1377,6 +1386,22 @@ document.addEventListener('submit', async event => {
         toast('Preferências salvas com sucesso!');
         render();
         break;
+      case 'change-password': {
+        const newPassword = form.elements.newPassword?.value;
+        if (!newPassword || newPassword.length < 6) {
+          toast('A nova senha deve ter no mínimo 6 caracteres.');
+          break;
+        }
+        if (demo) {
+          toast('Modo de demonstração: senha simulada.');
+          form.reset();
+          break;
+        }
+        await api('/me/password', 'PUT', { newPassword });
+        form.reset();
+        toast('Senha atualizada com sucesso!');
+        break;
+      }
       case 'post':
         if (demo) {
           posts.unshift({

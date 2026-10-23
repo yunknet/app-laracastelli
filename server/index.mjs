@@ -34,12 +34,23 @@ app.use(helmet({
 app.use('/api/photos', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use('/api', rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }));
+function generateDefaultPassword(fullName) {
+  if (!fullName || typeof fullName !== 'string') return 'aluna123456';
+  const firstName = fullName.trim().split(/\s+/)[0] || 'aluna';
+  const clean = firstName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  return (clean || 'aluna') + '123456';
+}
+
 // Webhook automático Lastlink, Hotmart, Kiwify, Eduzz, Stripe, etc.
 const webhookHandler = async (req, res) => {
   try {
-    const authHeader = req.get('x-webhook-token') || req.get('x-lastlink-token') || req.query.token;
+    const authHeader = req.get('x-webhook-token') || req.get('x-lastlink-token') || req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.query.token;
     const expectedSecret = process.env.WEBHOOK_SECRET || process.env.LASTLINK_TOKEN;
-    if (expectedSecret && authHeader && authHeader !== expectedSecret) {
+    if (expectedSecret && authHeader !== expectedSecret) {
       return res.status(401).json({ error: 'Token de webhook inválido.' });
     }
 
@@ -73,20 +84,21 @@ const webhookHandler = async (req, res) => {
       return res.status(400).json({ error: 'E-mail não encontrado ou inválido no payload.' });
     }
 
-    // Tratamento de cancelamento / reembolso (Lastlink: Payment_Refund, Payment_Chargeback)
-    const isRevoke = /refund|chargeback|cancel|expired|reembolso/i.test(event);
+    // Tratamento de cancelamento / reembolso / estorno (Lastlink, Hotmart, Kiwify, etc.)
+    const isRevoke = /refund|chargeback|cancel|expir|reembols|estorn|fim.*libera|remo.*acesso/i.test(event);
     if (isRevoke) {
       const existing = await db.get('SELECT id FROM users WHERE email=?', email);
       if (existing) {
         await db.run('UPDATE users SET active=0 WHERE id=?', existing.id);
         await db.run('DELETE FROM sessions WHERE user_id=?', existing.id);
-        console.log(`[Webhook] Acesso revogado/reembolsado: ${email}`);
+        console.log(`[Webhook Lastlink] Acesso revogado/reembolsado: ${email} (evento: ${event})`);
       }
-      return res.json({ ok: true, message: 'Acesso revogado com sucesso.', email });
+      return res.json({ ok: true, message: 'Acesso revogado com sucesso.', email, event });
     }
 
     // Aprovação de compra / ativação de aluna
-    const defaultPassword = process.env.LASTLINK_DEFAULT_PASSWORD || 'laramiva';
+    // Senha padrão gerada como: <primeironome>123456 (ex: maria123456)
+    const defaultPassword = generateDefaultPassword(name);
     const passwordToUse = body.password || defaultPassword;
     const existing = await db.get('SELECT id, email, active FROM users WHERE email=?', email);
 
@@ -115,7 +127,7 @@ const webhookHandler = async (req, res) => {
       JSON.stringify({ profile: { name, goal: 'Emagrecer', frequency: 4, level: 'Iniciante' } })
     );
 
-    console.log(`[Webhook] Nova aluna cadastrada com sucesso: ${email} (${name})`);
+    console.log(`[Webhook] Nova aluna cadastrada com sucesso: ${email} (${name}) com senha padrão`);
     res.status(201).json({
       ok: true,
       message: 'Aluna criada com sucesso.',
@@ -201,6 +213,27 @@ app.get('/api/media/:id', auth, (req, res) => {
 
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 app.get('/api/me', (req, res) => res.json({ user: req.user || null }));
+
+app.put('/api/me/password', auth, async (req, res, next) => {
+  try {
+    const newPassword = text(req.body.newPassword, 200);
+    if (!newPassword || newPassword.length < 6) {
+      return fail(res, 'A nova senha deve ter no mínimo 6 caracteres.');
+    }
+    const currentPassword = text(req.body.currentPassword, 200);
+    if (currentPassword) {
+      const user = await db.get('SELECT password FROM users WHERE id=?', req.user.id);
+      if (!user || !await passwordMatches(currentPassword, user.password)) {
+        return res.status(401).json({ error: 'Senha atual incorreta.' });
+      }
+    }
+    const hash = await passwordHash(newPassword);
+    await db.run('UPDATE users SET password=? WHERE id=?', hash, req.user.id);
+    res.json({ ok: true, message: 'Senha atualizada com sucesso!' });
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.post('/api/login', rateLimit({ windowMs: 15 * 60_000, limit: 15 }), async (req, res, next) => {
   try {
