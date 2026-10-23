@@ -34,15 +34,8 @@ app.use(helmet({
 app.use('/api/photos', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use('/api', rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }));
-function generateDefaultPassword(fullName) {
-  if (!fullName || typeof fullName !== 'string') return 'aluna123456';
-  const firstName = fullName.trim().split(/\s+/)[0] || 'aluna';
-  const clean = firstName
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-  return (clean || 'aluna') + '123456';
+function generateDefaultPassword() {
+  return process.env.DEFAULT_PASSWORD || 'metodolara';
 }
 
 // Webhook automático Lastlink, Hotmart, Kiwify, Eduzz, Stripe, etc.
@@ -130,8 +123,8 @@ const webhookHandler = async (req, res) => {
     }
 
     // Aprovação de compra / ativação de aluna
-    // Senha padrão gerada como: <primeironome>123456 (ex: maria123456)
-    const defaultPassword = generateDefaultPassword(name);
+    // Senha padrão unificada: metodolara
+    const defaultPassword = generateDefaultPassword();
     const passwordToUse = body.password || defaultPassword;
     const existing = await db.get('SELECT id, email, active FROM users WHERE email=?', email);
 

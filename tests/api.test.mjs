@@ -204,12 +204,12 @@ test('webhook generates firstName123456 password and provisions access', async (
   });
   assert.equal(hookRes.status, 201);
   const data = await hookRes.json();
-  assert.equal(data.temporaryPassword, 'maria123456');
+  assert.equal(data.temporaryPassword, 'metodolara');
 
-  // Aluna deve conseguir logar usando o e-mail da compra e a senha maria123456
+  // Aluna deve conseguir logar usando o e-mail da compra e a senha metodolara
   const loginRes = await request('/login', {
     method: 'POST',
-    body: { email: 'maria.eduarda@exemplo.com', password: 'maria123456' }
+    body: { email: 'maria.eduarda@exemplo.com', password: 'metodolara' }
   });
   assert.equal(loginRes.status, 200);
 
@@ -232,7 +232,7 @@ test('webhook generates firstName123456 password and provisions access', async (
   // Após reembolso, login deve ser recusado
   const afterRefundLogin = await request('/login', {
     method: 'POST',
-    body: { email: 'maria.eduarda@exemplo.com', password: 'maria123456' }
+    body: { email: 'maria.eduarda@exemplo.com', password: 'metodolara' }
   });
   assert.equal(afterRefundLogin.status, 401);
 
