@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 await initDb();
 
 const email = (process.argv[2] || '').toLowerCase().trim();
-const password = process.argv[3] || 'laramiva';
+const password = process.argv[3] || 'metodolara';
 const role = process.argv[4] || 'admin'; // 'admin' ou 'member'
 const name = process.argv[5] || (role === 'admin' ? 'Administrador MIVA' : 'Aluna Lara Castelli');
 

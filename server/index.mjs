@@ -497,7 +497,9 @@ app.post('/api/admin/users', auth, admin, async (req, res, next) => {
     const name = text(req.body.name, 100), email = text(req.body.email).toLowerCase(), password = text(req.body.password, 200);
     if (!name || !/^\S+@\S+\.\S+$/.test(email) || password.length < 6) return fail(res, 'Informe nome, e-mail válido e senha com 6 caracteres ou mais.');
     if (await db.get('SELECT 1 FROM users WHERE email=?', email)) return res.status(409).json({ error: 'E-mail já cadastrado.' });
-    await db.run('INSERT INTO users(id, name, email, password, role) VALUES(?,?,?,?)', randomUUID(), name, email, await passwordHash(password));
+    const newUserId = randomUUID();
+    await db.run('INSERT INTO users(id, name, email, password, role) VALUES(?,?,?,?,\'member\')', newUserId, name, email, await passwordHash(password));
+    await db.run('INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO NOTHING', newUserId, JSON.stringify({ profile: { name, goal: 'Emagrecer', frequency: 4, level: 'Iniciante' } }));
     res.status(201).json({ ok: true });
   } catch (err) {
     next(err);
