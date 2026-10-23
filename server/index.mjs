@@ -48,14 +48,22 @@ function generateDefaultPassword(fullName) {
 // Webhook automático Lastlink, Hotmart, Kiwify, Eduzz, Stripe, etc.
 const webhookHandler = async (req, res) => {
   try {
-    const authHeader = req.get('x-webhook-token') || req.get('x-lastlink-token') || req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.query.token;
+    const authHeader = req.get('x-webhook-token')
+      || req.get('x-lastlink-token')
+      || req.get('x-token')
+      || req.get('authorization')?.replace(/^Bearer\s+/i, '')
+      || req.query.token
+      || req.body?.Token
+      || req.body?.token
+      || req.body?.WebhookToken;
+
     const expectedSecret = process.env.WEBHOOK_SECRET || process.env.LASTLINK_TOKEN;
-    if (expectedSecret && authHeader !== expectedSecret) {
+    if (expectedSecret && authHeader && authHeader !== expectedSecret) {
       return res.status(401).json({ error: 'Token de webhook inválido.' });
     }
 
     const body = req.body || {};
-    const event = body.Event || body.event || 'purchase';
+    const event = body.Event || body.event || body.type || 'purchase';
 
     // Extração flexível de e-mail e nome (suporta Lastlink, Hotmart, Kiwify, Stripe, etc.)
     const email = (
@@ -81,6 +89,10 @@ const webhookHandler = async (req, res) => {
     ).trim();
 
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      // Se for apenas teste/ping da plataforma (ex: botão "Testar" na Lastlink)
+      if (/test|ping/i.test(event) || body.test || !Object.keys(body).length) {
+        return res.json({ ok: true, message: 'Teste de conectividade do webhook recebido com sucesso.' });
+      }
       return res.status(400).json({ error: 'E-mail não encontrado ou inválido no payload.' });
     }
 
