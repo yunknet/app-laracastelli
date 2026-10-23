@@ -235,4 +235,44 @@ test('webhook generates firstName123456 password and provisions access', async (
     body: { email: 'maria.eduarda@exemplo.com', password: 'maria123456' }
   });
   assert.equal(afterRefundLogin.status, 401);
+
+  // Testa payload real de Product_Access_Started da Lastlink
+  const accessStartRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Event: 'Product_Access_Started',
+      Product: { Id: '123', Name: 'Método Lara Castelli' },
+      Member: { Id: 'm1', Email: 'aluna.teste@lastlink.com' },
+      AccessType: 'Paid'
+    })
+  });
+  assert.equal(accessStartRes.status, 201);
+
+  // Testa payload real de Product_Access_Ended da Lastlink (revogação)
+  const accessEndRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Event: 'Product_Access_Ended',
+      Product: { Id: '123', Name: 'Método Lara Castelli' },
+      Member: { Id: 'm1', Email: 'aluna.teste@lastlink.com' },
+      AccessType: 'subscription'
+    })
+  });
+  assert.equal(accessEndRes.status, 200);
+
+  // Testa rajada concorrente de Purchase_Order_Confirmed (idêntica ao botão Testar da Lastlink)
+  const burstPayload = {
+    Event: 'Purchase_Order_Confirmed',
+    Buyer: { Name: 'Moises Pereira', Email: 'moises.burst@test.com' }
+  };
+  const burstResults = await Promise.all([
+    fetch(origin + '/api/webhook/lastlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(burstPayload) }),
+    fetch(origin + '/api/webhook/lastlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(burstPayload) }),
+    fetch(origin + '/api/webhook/lastlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(burstPayload) })
+  ]);
+  const statuses = burstResults.map(r => r.status);
+  // Todas as 3 devem ter status 200 ou 201 (nenhuma pode dar 500)
+  assert.ok(statuses.every(s => s === 200 || s === 201), `Rajada falhou com status: ${statuses.join(',')}`);
 });

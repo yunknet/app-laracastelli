@@ -67,25 +67,46 @@ const webhookHandler = async (req, res) => {
 
     // Extração flexível de e-mail e nome (suporta Lastlink, Hotmart, Kiwify, Stripe, etc.)
     const email = (
-      body.Data?.Buyer?.Email ||
+      body.Buyer?.Email ||
+      body.Buyer?.email ||
+      body.buyer?.Email ||
       body.buyer?.email ||
+      body.Member?.Email ||
+      body.Member?.email ||
+      body.member?.Email ||
+      body.member?.email ||
+      body.Data?.Buyer?.Email ||
+      body.Data?.Buyer?.email ||
       body.data?.buyer?.email ||
-      body.email ||
+      body.data?.buyer?.Email ||
+      body.Data?.Member?.Email ||
+      body.data?.member?.email ||
+      body.Customer?.Email ||
       body.customer?.email ||
       body.data?.customer?.email ||
+      body.email ||
+      body.Email ||
       body.client?.email ||
       ''
     ).toLowerCase().trim();
 
     const name = (
-      body.Data?.Buyer?.Name ||
+      body.Buyer?.Name ||
+      body.Buyer?.name ||
+      body.buyer?.Name ||
       body.buyer?.name ||
+      body.Member?.Name ||
+      body.Member?.name ||
+      body.member?.Name ||
+      body.member?.name ||
+      body.Data?.Buyer?.Name ||
+      body.Data?.Buyer?.name ||
       body.data?.buyer?.name ||
-      body.name ||
       body.customer?.name ||
-      body.data?.customer?.name ||
-      body.client?.name ||
-      'Aluna Lara Castelli'
+      body.Customer?.Name ||
+      body.name ||
+      body.Name ||
+      (email ? email.split('@')[0] : 'Aluna')
     ).trim();
 
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
@@ -96,8 +117,8 @@ const webhookHandler = async (req, res) => {
       return res.status(400).json({ error: 'E-mail não encontrado ou inválido no payload.' });
     }
 
-    // Tratamento de cancelamento / reembolso / estorno (Lastlink, Hotmart, Kiwify, etc.)
-    const isRevoke = /refund|chargeback|cancel|expir|reembols|estorn|fim.*libera|remo.*acesso/i.test(event);
+    // Tratamento de cancelamento / reembolso / estorno / fim de acesso
+    const isRevoke = /refund|chargeback|cancel|expir|reembols|estorn|fim.*libera|remo.*acesso|ended|revok/i.test(event);
     if (isRevoke) {
       const existing = await db.get('SELECT id FROM users WHERE email=?', email);
       if (existing) {
@@ -124,20 +145,29 @@ const webhookHandler = async (req, res) => {
     const userId = randomUUID();
     const hash = await passwordHash(passwordToUse);
 
-    await db.run(
-      'INSERT INTO users(id, name, email, password, role, active) VALUES(?,?,?,?,?,1)',
-      userId,
-      name,
-      email,
-      hash,
-      'member'
-    );
+    try {
+      await db.run(
+        'INSERT INTO users(id, name, email, password, role, active) VALUES(?,?,?,?,?,1) ON CONFLICT (email) DO UPDATE SET active=1',
+        userId,
+        name,
+        email,
+        hash,
+        'member'
+      );
 
-    await db.run(
-      'INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO NOTHING',
-      userId,
-      JSON.stringify({ profile: { name, goal: 'Emagrecer', frequency: 4, level: 'Iniciante' } })
-    );
+      await db.run(
+        'INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO NOTHING',
+        userId,
+        JSON.stringify({ profile: { name, goal: 'Emagrecer', frequency: 4, level: 'Iniciante' } })
+      );
+    } catch (insertErr) {
+      const fallback = await db.get('SELECT id FROM users WHERE email=?', email);
+      if (fallback) {
+        await db.run('UPDATE users SET active=1 WHERE id=?', fallback.id);
+        return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: fallback.id });
+      }
+      throw insertErr;
+    }
 
     console.log(`[Webhook] Nova aluna cadastrada com sucesso: ${email} (${name}) com senha padrão`);
     res.status(201).json({
