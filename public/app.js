@@ -294,6 +294,22 @@ function formField(label, name, type = 'text', value = '', extra = '') {
   return `<label class="field"><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;
 }
 
+function choiceCard(action, val, currentVal, iconEmoji, title, sub = '') {
+  const isSelected = String(currentVal) === String(val);
+  return `
+    <button type="button" class="choice-card ${isSelected ? 'active' : ''}" data-action="${action}" data-val="${val}">
+      <div class="choice-card-content">
+        <span class="choice-card-icon">${iconEmoji}</span>
+        <div class="choice-card-text">
+          <strong class="choice-card-title">${esc(title)}</strong>
+          ${sub ? `<span class="choice-card-sub">${esc(sub)}</span>` : ''}
+        </div>
+      </div>
+      <span class="choice-card-radio"></span>
+    </button>
+  `;
+}
+
 function pageContent() {
   switch (page) {
     case 'home': return homeView();
@@ -375,42 +391,45 @@ function homeView() {
       </div>
 
       ${showSetupForm ? `
-        <form data-form="setup-plan" style="display: flex; flex-direction: column; gap: 16px;">
+        <form data-form="setup-plan" style="display: flex; flex-direction: column; gap: 20px;">
           <label class="field" style="margin-bottom: 0;">
-            <span style="font-size: 12px; font-weight: 700;">Como você quer ser chamada?</span>
-            <input name="name" type="text" value="${esc(name())}" required placeholder="Seu nome" style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); font-size: 13px; width: 100%;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--ink);">Como você quer ser chamada?</span>
+            <input name="name" type="text" value="${esc(name())}" required placeholder="Seu nome ou apelido" style="padding: 12px 14px; border-radius: 8px; border: 1.5px solid var(--line); font-size: 14px; width: 100%;">
           </label>
 
           <div>
-            <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Objetivo Principal</span>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn-pill-choice ${state.profile.goal === 'Emagrecer' ? 'active' : ''}" data-action="select-goal" data-val="Emagrecer">🔥 Emagrecer e Definir</button>
-              <button type="button" class="btn-pill-choice ${state.profile.goal === 'Massa Magra' ? 'active' : ''}" data-action="select-goal" data-val="Massa Magra">💪 Ganho de Massa Magra</button>
-              <button type="button" class="btn-pill-choice ${state.profile.goal === 'Criar rotina' ? 'active' : ''}" data-action="select-goal" data-val="Criar rotina">⚡ Criar Rotina Constante</button>
+            <span style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink);">Qual é o seu objetivo principal?</span>
+            <p style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Toque na opção desejada para selecionar:</p>
+            <div class="choice-grid">
+              ${choiceCard('select-goal', 'Emagrecer', state.profile.goal, '🔥', 'Emagrecer e Definir', 'Déficit calórico com firmeza muscular')}
+              ${choiceCard('select-goal', 'Massa Magra', state.profile.goal, '💪', 'Ganho de Massa Magra', 'Tonificação e hipertrofia')}
+              ${choiceCard('select-goal', 'Criar rotina', state.profile.goal, '⚡', 'Criar Rotina Constante', 'Hábito diário progressivo')}
             </div>
           </div>
 
           <div>
-            <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Nível de Treino</span>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn-pill-choice ${state.profile.level === 'Iniciante' ? 'active' : ''}" data-action="select-level" data-val="Iniciante">🌱 Iniciante (voltando a treinar)</button>
-              <button type="button" class="btn-pill-choice ${state.profile.level === 'Intermediário' ? 'active' : ''}" data-action="select-level" data-val="Intermediário">🌿 Intermediário</button>
-              <button type="button" class="btn-pill-choice ${state.profile.level === 'Avançado' ? 'active' : ''}" data-action="select-level" data-val="Avançado">🌳 Avançado</button>
+            <span style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink);">Qual é o seu nível de treino atual?</span>
+            <p style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Toque na opção desejada para selecionar:</p>
+            <div class="choice-grid">
+              ${choiceCard('select-level', 'Iniciante', state.profile.level, '🌱', 'Iniciante', 'Voltando aos treinos ou 1ª vez')}
+              ${choiceCard('select-level', 'Intermediário', state.profile.level, '🌿', 'Intermediário', 'Já treina há pelo menos 6 meses')}
+              ${choiceCard('select-level', 'Avançado', state.profile.level, '🌳', 'Avançado', 'Treino constante e boa intensidade')}
             </div>
           </div>
 
           <div>
-            <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Frequência Semanal</span>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn-pill-choice ${state.profile.frequency === 3 ? 'active' : ''}" data-action="select-freq" data-val="3">3 dias por semana</button>
-              <button type="button" class="btn-pill-choice ${state.profile.frequency === 4 ? 'active' : ''}" data-action="select-freq" data-val="4">4 dias por semana (Recomendado)</button>
-              <button type="button" class="btn-pill-choice ${state.profile.frequency === 5 ? 'active' : ''}" data-action="select-freq" data-val="5">5 dias por semana</button>
-              <button type="button" class="btn-pill-choice ${state.profile.frequency === 6 ? 'active' : ''}" data-action="select-freq" data-val="6">6 dias por semana</button>
+            <span style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink);">Quantos dias você quer treinar por semana?</span>
+            <p style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Toque na opção desejada para selecionar:</p>
+            <div class="choice-grid-4">
+              ${choiceCard('select-freq', '3', state.profile.frequency, '🗓️', '3x na semana', 'Dias alternados')}
+              ${choiceCard('select-freq', '4', state.profile.frequency, '⭐', '4x na semana', 'Recomendado')}
+              ${choiceCard('select-freq', '5', state.profile.frequency, '🔥', '5x na semana', 'Ritmo intenso')}
+              ${choiceCard('select-freq', '6', state.profile.frequency, '⚡', '6x na semana', 'Foco máximo')}
             </div>
           </div>
 
-          <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
-            <button class="btn" type="submit" style="min-height: 40px; font-size: 13px;">Salvar Meu Plano ✨</button>
+          <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
+            <button class="btn" type="submit" style="min-height: 42px; font-size: 13px; padding: 10px 22px;">Salvar Meu Plano ✨</button>
           </div>
         </form>
       ` : `
@@ -858,39 +877,42 @@ function profileView() {
       <p style="font-size: 13px; color: var(--muted); margin-top: 4px;">Personalize suas preferências de treino e metas.</p>
     </div>
 
-    <form data-form="profile" class="card" style="max-width: 600px; margin-bottom: 24px;">
+    <form data-form="profile" class="card" style="max-width: 650px; margin-bottom: 24px;">
       <h3 style="margin-bottom: 16px;">Seus Dados de Treino</h3>
       ${formField('Como quer ser chamada?', 'name', 'text', name(), 'required placeholder="Seu nome"')}
       
-      <div style="margin-bottom: 16px;">
-        <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Objetivo Principal</span>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button type="button" class="btn-pill-choice ${state.profile.goal === 'Emagrecer' ? 'active' : ''}" data-action="select-goal" data-val="Emagrecer">🔥 Emagrecer e Definir</button>
-          <button type="button" class="btn-pill-choice ${state.profile.goal === 'Massa Magra' ? 'active' : ''}" data-action="select-goal" data-val="Massa Magra">💪 Ganho de Massa Magra</button>
-          <button type="button" class="btn-pill-choice ${state.profile.goal === 'Criar rotina' ? 'active' : ''}" data-action="select-goal" data-val="Criar rotina">⚡ Criar Rotina Constante</button>
+      <div style="margin-bottom: 18px;">
+        <span style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink);">Objetivo Principal</span>
+        <p style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Toque na opção desejada para selecionar:</p>
+        <div class="choice-grid">
+          ${choiceCard('select-goal', 'Emagrecer', state.profile.goal, '🔥', 'Emagrecer e Definir', 'Déficit calórico com firmeza muscular')}
+          ${choiceCard('select-goal', 'Massa Magra', state.profile.goal, '💪', 'Ganho de Massa Magra', 'Tonificação e hipertrofia')}
+          ${choiceCard('select-goal', 'Criar rotina', state.profile.goal, '⚡', 'Criar Rotina Constante', 'Hábito diário progressivo')}
         </div>
       </div>
 
-      <div style="margin-bottom: 16px;">
-        <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Nível de Treino</span>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button type="button" class="btn-pill-choice ${state.profile.level === 'Iniciante' ? 'active' : ''}" data-action="select-level" data-val="Iniciante">🌱 Iniciante (voltando a treinar)</button>
-          <button type="button" class="btn-pill-choice ${state.profile.level === 'Intermediário' ? 'active' : ''}" data-action="select-level" data-val="Intermediário">🌿 Intermediário</button>
-          <button type="button" class="btn-pill-choice ${state.profile.level === 'Avançado' ? 'active' : ''}" data-action="select-level" data-val="Avançado">🌳 Avançado</button>
+      <div style="margin-bottom: 18px;">
+        <span style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink);">Nível de Treino</span>
+        <p style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Toque na opção desejada para selecionar:</p>
+        <div class="choice-grid">
+          ${choiceCard('select-level', 'Iniciante', state.profile.level, '🌱', 'Iniciante', 'Voltando aos treinos ou 1ª vez')}
+          ${choiceCard('select-level', 'Intermediário', state.profile.level, '🌿', 'Intermediário', 'Já treina há pelo menos 6 meses')}
+          ${choiceCard('select-level', 'Avançado', state.profile.level, '🌳', 'Avançado', 'Treino constante e boa intensidade')}
         </div>
       </div>
 
-      <div style="margin-bottom: 16px;">
-        <span style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px;">Frequência Semanal</span>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button type="button" class="btn-pill-choice ${state.profile.frequency === 3 ? 'active' : ''}" data-action="select-freq" data-val="3">3 dias por semana</button>
-          <button type="button" class="btn-pill-choice ${state.profile.frequency === 4 ? 'active' : ''}" data-action="select-freq" data-val="4">4 dias por semana (Recomendado)</button>
-          <button type="button" class="btn-pill-choice ${state.profile.frequency === 5 ? 'active' : ''}" data-action="select-freq" data-val="5">5 dias por semana</button>
-          <button type="button" class="btn-pill-choice ${state.profile.frequency === 6 ? 'active' : ''}" data-action="select-freq" data-val="6">6 dias por semana</button>
+      <div style="margin-bottom: 18px;">
+        <span style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink);">Frequência Semanal</span>
+        <p style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Toque na opção desejada para selecionar:</p>
+        <div class="choice-grid-4">
+          ${choiceCard('select-freq', '3', state.profile.frequency, '🗓️', '3x na semana', 'Dias alternados')}
+          ${choiceCard('select-freq', '4', state.profile.frequency, '⭐', '4x na semana', 'Recomendado')}
+          ${choiceCard('select-freq', '5', state.profile.frequency, '🔥', '5x na semana', 'Ritmo intenso')}
+          ${choiceCard('select-freq', '6', state.profile.frequency, '⚡', '6x na semana', 'Foco máximo')}
         </div>
       </div>
 
-      <button class="btn" style="margin-top: 8px;">Salvar alterações</button>
+      <button class="btn" style="margin-top: 8px; min-height: 42px; font-size: 13px;">Salvar alterações ✨</button>
     </form>
 
     <form data-form="change-password" class="card" style="max-width: 600px; margin-bottom: 24px;">
