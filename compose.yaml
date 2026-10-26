@@ -26,17 +26,22 @@ services:
     environment:
       NODE_ENV: production
       APP_ORIGIN: ${APP_ORIGIN:?Defina APP_ORIGIN com o dominio HTTPS}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-lara}:${POSTGRES_PASSWORD:-lara_secret_change_me}@db:5432/${POSTGRES_DB:-lara}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-lara}:${POSTGRES_PASSWORD:-lara_secret_change_me}@db:5432/${POSTGRES_DB:-lara}}
       TRUST_PROXY: '1'
       HOST: 0.0.0.0
       PORT: '5190'
       MEDIA_ROOT: /app/data/media
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      LASTLINK_TOKEN: ${LASTLINK_TOKEN:-}
+      LASTLINK_PRODUCT_ID: ${LASTLINK_PRODUCT_ID:-}
+      DEFAULT_PASSWORD: ${DEFAULT_PASSWORD:-metodolara}
     ports:
       - '127.0.0.1:5190:5190'
     volumes:
       - lara_media:/app/data/media
       - ./server:/app/server
       - ./public:/app/public
+      - ./backups:/app/backups
     security_opt:
       - no-new-privileges:true
     cap_drop:

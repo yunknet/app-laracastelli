@@ -26,6 +26,9 @@ if (isPg) {
     console.error('Unexpected error on idle PostgreSQL client', err);
   });
 } else {
+  if (process.env.NODE_ENV === 'production' && !process.env.DB_PATH) {
+    console.warn('\n⚠️ [ALERTA DE PRODUÇÃO] DATABASE_URL não foi definida. A aplicação está usando SQLite local. Para persistência com PostgreSQL, forneça a variável DATABASE_URL.\n');
+  }
   const { DatabaseSync } = await import('node:sqlite');
   mkdirSync(path.dirname(dbPath), { recursive: true });
   sqliteDb = new DatabaseSync(dbPath);
@@ -174,6 +177,13 @@ export async function initDb() {
         mime TEXT NOT NULL,
         data BYTEA NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS webhook_events (
+        id TEXT PRIMARY KEY,
+        event TEXT NOT NULL,
+        email TEXT NOT NULL,
+        payload TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
     `);
   } else {
@@ -188,6 +198,7 @@ export async function initDb() {
       CREATE TABLE IF NOT EXISTS comments(id TEXT PRIMARY KEY,post_id TEXT REFERENCES posts(id) ON DELETE CASCADE,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS tickets(id TEXT PRIMARY KEY,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,reply TEXT NOT NULL DEFAULT '',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS photos(id TEXT PRIMARY KEY,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,date TEXT NOT NULL,mime TEXT NOT NULL,data BLOB NOT NULL);
+      CREATE TABLE IF NOT EXISTS webhook_events(id TEXT PRIMARY KEY,event TEXT NOT NULL,email TEXT NOT NULL,payload TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
     `);
   }

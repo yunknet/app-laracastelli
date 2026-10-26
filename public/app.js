@@ -49,6 +49,8 @@ let state = blankState();
 let content = structuredClone(demoContent);
 let posts = [];
 let tickets = [];
+let photos = [];
+let pipMode = 'iniciante'; // 'iniciante' ou 'avancado'
 let page = 'home';
 let activeWorkoutId = null;
 let activeLessonTab = 'pratica'; // 'instrucoes' ou 'pratica'
@@ -231,6 +233,39 @@ function render() {
   if (page === 'community') refreshPosts();
   if (page === 'care') refreshTickets();
   if (page === 'admin') refreshAdmin();
+  if (page === 'workout') attachVideoTracker();
+}
+
+function attachVideoTracker() {
+  const vid = $('#workout-video');
+  if (!vid || !activeWorkoutId) return;
+
+  if (!state.videoPositions) state.videoPositions = {};
+  const savedPos = state.videoPositions[activeWorkoutId];
+  if (savedPos && savedPos > 5) {
+    vid.addEventListener('loadedmetadata', () => {
+      if (savedPos < vid.duration - 5) {
+        vid.currentTime = savedPos;
+        const mins = Math.floor(savedPos / 60);
+        const secs = String(Math.floor(savedPos % 60)).padStart(2, '0');
+        toast(`Retomando aula de onde parou (${mins}:${secs})`);
+      }
+    }, { once: true });
+  }
+
+  let saveTimer = null;
+  vid.addEventListener('timeupdate', () => {
+    if (vid.currentTime > 5 && !vid.ended) {
+      state.videoPositions[activeWorkoutId] = Math.floor(vid.currentTime);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => save(), 2500);
+    }
+  });
+
+  vid.addEventListener('ended', () => {
+    state.videoPositions[activeWorkoutId] = 0;
+    save();
+  });
 }
 
 function pageTitle() {
@@ -521,14 +556,7 @@ function homeView() {
    ======================================================== */
 function trainingView() {
   const allWorkouts = workouts().length > 0 ? workouts() : demoContent.filter(c => c.kind === 'workout');
-  let currentWorkouts = allWorkouts.filter(w => (w.month || 1) === currentMonth && w.category !== 'Bônus');
-  if (currentWorkouts.length === 0) {
-    currentWorkouts = allWorkouts.filter(w => w.category !== 'Bônus').map(w => ({
-      ...w,
-      category: `Mês 0${currentMonth}`,
-      month: currentMonth
-    }));
-  }
+  const currentWorkouts = allWorkouts.filter(w => (w.month || 1) === currentMonth && w.category !== 'Bônus');
   const bonusWorkouts = allWorkouts.filter(w => w.category === 'Bônus');
 
   return `
@@ -554,20 +582,28 @@ function trainingView() {
           <p>Vídeos guiados com cronômetro e ficha por nível</p>
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px;">
-        ${currentWorkouts.map(w => `
-          <button class="rail-card-wide" style="flex: auto;" data-action="open-workout" data-id="${w.id}">
-            <div class="card-media" style="height: 140px;">
-              <img src="${w.poster}" alt="${esc(w.title)}">
-              <span class="pill-badge">${esc(w.category)}</span>
-            </div>
-            <div class="card-body">
-              <h3 class="card-title">${esc(w.title)}</h3>
-              <p class="card-sub">${w.minutes} min • ${esc(w.level)}</p>
-            </div>
-          </button>
-        `).join('')}
-      </div>
+      ${currentWorkouts.length > 0 ? `
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px;">
+          ${currentWorkouts.map(w => `
+            <button class="rail-card-wide" style="flex: auto;" data-action="open-workout" data-id="${w.id}">
+              <div class="card-media" style="height: 140px;">
+                <img src="${w.poster}" alt="${esc(w.title)}">
+                <span class="pill-badge">${esc(w.category)}</span>
+              </div>
+              <div class="card-body">
+                <h3 class="card-title">${esc(w.title)}</h3>
+                <p class="card-sub">${w.minutes} min • ${esc(w.level)}</p>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      ` : `
+        <div style="padding: 32px 20px; text-align: center; background: #fff; border-radius: var(--radius-md); border: 1px dashed var(--line);">
+          <div style="font-size: 28px; margin-bottom: 8px;">⏳</div>
+          <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 6px;">Mês 0${currentMonth} em preparação</h3>
+          <p style="font-size: 13px; color: var(--muted); max-width: 420px; margin: 0 auto;">As aulas e progressões específicas do Mês 0${currentMonth} serão liberadas conforme sua conclusão dos treinos anteriores.</p>
+        </div>
+      `}
     </section>
 
     <!-- Trilho de Bônus -->
@@ -606,8 +642,17 @@ function fichaView() {
 
   return `
     <div style="margin-bottom: 24px;">
-      <h1 style="font-size: 24px; font-weight: 800;">Ficha Interativa • Mês 01</h1>
-      <p style="font-size: 13px; color: var(--muted); margin-top: 4px;">Adaptada ao seu nível, objetivo e frequência semanal de treinos.</p>
+      <h1 style="font-size: 24px; font-weight: 800;">Ficha Interativa • Mês 0${currentMonth}</h1>
+      <p style="font-size: 13px; color: var(--muted); margin-top: 4px;">Programação personalizada de acordo com seu objetivo e rotina semanal.</p>
+    </div>
+
+    <!-- Seletor de Mês da Ficha -->
+    <div class="pill-group" style="margin-bottom: 18px;">
+      ${[1, 2, 3].map(m => `
+        <button class="${currentMonth === m ? 'active' : ''}" data-action="set-month" data-id="${m}">
+          Mês 0${m}
+        </button>
+      `).join('')}
     </div>
 
     <div class="ficha-view">
@@ -623,11 +668,11 @@ function fichaView() {
           </button>
         </div>
 
-        <!-- Dropdown de Semana -->
-        <div class="week-select-pill">
+        <!-- Seletor Interativo de Semana -->
+        <button class="week-select-pill" data-action="cycle-week" title="Toque para alternar entre as 4 semanas do mês" style="cursor: pointer; background: var(--paper); border: 1px solid var(--line); border-radius: 20px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; color: var(--ink);">
           <span>Semana ${currentWeek}</span>
           ${icon('arrow')}
-        </div>
+        </button>
 
         <!-- Frequência: 3x, 4x, 5x, 6x sem -->
         <div class="pill-group">
@@ -660,7 +705,7 @@ function fichaView() {
       </div>
 
       <div style="margin-top: 24px; padding: 16px; background: #fafbf9; border-radius: var(--radius-md); font-size: 12px; color: var(--muted); line-height: 1.6;">
-        💡 <b>Como funciona:</b> Toque em qualquer aula da sua semana para abrir o vídeo com a execução correta e a contagem de descanso guiada.
+        💡 <b>Objetivo Ativo (${goal}):</b> Programação calculada para ${frequency}x na semana com pausas estruturadas para recuperação articular e tônus muscular.
       </div>
     </div>
   `;
@@ -692,7 +737,7 @@ function workoutPlayerView() {
       <!-- Seletor de Lições (Screenshot 3) -->
       <div class="lesson-accordion">
         <div class="lesson-item ${activeLessonTab === 'instrucoes' ? 'active' : ''}" data-action="set-lesson-tab" data-id="instrucoes" style="cursor: pointer;">
-          <span>⚪ ${esc(workout.title)} • Instruções</span>
+          <span>⚪ ${esc(workout.title)} • Instruções Técnicas</span>
           ${icon('arrow')}
         </div>
         <div class="lesson-item ${activeLessonTab === 'pratica' ? 'active' : ''}" data-action="set-lesson-tab" data-id="pratica" style="cursor: pointer;">
@@ -701,29 +746,58 @@ function workoutPlayerView() {
         </div>
       </div>
 
-      <!-- Player de Vídeo com PIP e Cronômetro (Screenshots 3 e 4) -->
-      <div class="video-wrapper">
-        <video id="workout-video" controls playsinline preload="metadata" src="${workout.video}" poster="${workout.poster}"></video>
-        
-        <!-- PIP Adaptação Iniciante/Avançado (Screenshot 3 e 4) -->
-        <div class="video-pip" title="Demonstração alternativa adaptada">
-          <img src="/assets/treino-poster-2.jpg" alt="Adaptação">
-          <span>Iniciante</span>
+      ${activeLessonTab === 'instrucoes' ? `
+        <!-- Painel Técnico de Instruções -->
+        <div class="instructions-panel" style="background: #fff; padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--line); margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <span style="font-size: 22px;">📋</span>
+            <h3 style="font-size: 16px; font-weight: 800;">Orientações da Treinadora Lara Castelli</h3>
+          </div>
+          <p style="font-size: 13px; color: var(--ink); line-height: 1.6; margin-bottom: 14px;">
+            ${esc(workout.instructions || 'Mantenha a postura alinhada, respiração diafragmática ativa e respeite os limites do seu corpo.')}
+          </p>
+          <div style="background: var(--paper); border-left: 3px solid var(--green); padding: 12px; border-radius: 4px; font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.6;">
+            <strong>💡 Foco do Treino:</strong> ${esc(workout.description)}
+          </div>
+          <h4 style="font-size: 13px; font-weight: 800; margin-bottom: 10px;">Postura & Cues por Exercício:</h4>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            ${(workout.exercises || []).map((e, idx) => `
+              <div style="padding: 10px; background: #fafbf9; border-radius: 8px; border: 1px solid var(--line);">
+                <strong style="font-size: 13px; display: block;">${idx + 1}. ${esc(e.name)}</strong>
+                <span style="font-size: 12px; color: var(--muted); display: block; margin-top: 2px;">Prescrição: ${esc(e.detail)}</span>
+                ${e.beginner ? `<span style="font-size: 11px; color: var(--green); display: block; margin-top: 4px;">• <i>Opção Adaptada (Iniciante):</i> ${esc(e.beginner)}</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn full" data-action="set-lesson-tab" data-id="pratica" style="margin-top: 18px;">
+            ▶ Iniciar Prática Guiada no Player
+          </button>
         </div>
+      ` : `
+        <!-- Player de Vídeo com PIP e Cronômetro (Screenshots 3 e 4) -->
+        <div class="video-wrapper">
+          <video id="workout-video" controls playsinline preload="metadata" src="${workout.video}" poster="${workout.poster}"></video>
+          
+          <!-- PIP Adaptação Iniciante/Avançado Interativo -->
+          <div class="video-pip" data-action="toggle-pip" title="Toque para alternar o modo adaptado" style="cursor: pointer;">
+            <img src="${pipMode === 'iniciante' ? '/assets/treino-poster-2.jpg' : '/assets/treino-poster-4.jpg'}" alt="Adaptação">
+            <span>${pipMode === 'iniciante' ? 'Iniciante' : 'Avançado'} 🔄</span>
+          </div>
 
-        <!-- Overlay do Cronômetro Interativo (Screenshot 4) -->
-        <div class="timer-overlay" id="timer-box" style="display: none;">
-          <div id="rest-icon" style="display: none;">
-            ${icon('water', 'timer-bottle-icon')}
-          </div>
-          <div class="timer-countdown" id="timer-display">0:10</div>
-          <div class="timer-msg" id="timer-label">EXECUÇÃO</div>
-          <div class="timer-controls">
-            <button class="btn lime" data-action="timer-toggle">Pausar</button>
-            <button class="btn light" data-action="timer-close">Fechar cronômetro</button>
+          <!-- Overlay do Cronômetro Interativo -->
+          <div class="timer-overlay hidden" id="timer-box">
+            <div id="rest-icon" class="hidden">
+              ${icon('water', 'timer-bottle-icon')}
+            </div>
+            <div class="timer-countdown" id="timer-display">0:10</div>
+            <div class="timer-msg" id="timer-label">EXECUÇÃO</div>
+            <div class="timer-controls">
+              <button class="btn lime" data-action="timer-toggle">Pausar</button>
+              <button class="btn light" data-action="timer-close">Fechar cronômetro</button>
+            </div>
           </div>
         </div>
-      </div>
+      `}
 
       <!-- Ações da Lição (Screenshot 3) -->
       <div class="lesson-actions">
@@ -1151,7 +1225,7 @@ async function refreshAdmin() {
               </div>
               ${u.id !== user.id ? `
                 <div style="display: flex; gap: 8px;">
-                  <button class="btn light" style="font-size: 11px; min-height: 32px; padding: 6px 12px;" data-action="toggle-user" data-id="${u.id}">
+                  <button class="btn light" style="font-size: 11px; min-height: 32px; padding: 6px 12px;" data-action="toggle-user" data-id="${u.id}" data-active="${u.active ? '1' : '0'}">
                     ${u.active ? 'Suspender' : 'Ativar'}
                   </button>
                 </div>
@@ -1201,15 +1275,15 @@ function startWorkoutTimer(seconds, type = 'work') {
 
   if (!timerBox) return;
 
-  timerBox.style.display = 'flex';
+  timerBox.classList.remove('hidden');
   if (type === 'rest') {
     timerBox.classList.add('rest');
-    restIcon.style.display = 'block';
-    timerLabel.textContent = 'DESCANSE E HIDRATE-SE';
+    if (restIcon) restIcon.classList.remove('hidden');
+    if (timerLabel) timerLabel.textContent = 'DESCANSE E HIDRATE-SE';
   } else {
     timerBox.classList.remove('rest');
-    restIcon.style.display = 'none';
-    timerLabel.textContent = 'EXECUÇÃO';
+    if (restIcon) restIcon.classList.add('hidden');
+    if (timerLabel) timerLabel.textContent = 'EXECUÇÃO';
   }
 
   updateTimerUI();
@@ -1224,7 +1298,7 @@ function startWorkoutTimer(seconds, type = 'work') {
         // Entra automaticamente no descanso
         startWorkoutTimer(30, 'rest');
       } else {
-        setTimeout(() => { timerBox.style.display = 'none'; }, 1500);
+        setTimeout(() => { timerBox.classList.add('hidden'); }, 1500);
       }
     }
   }, 1000);
@@ -1241,7 +1315,7 @@ function updateTimerUI() {
 function stopWorkoutTimer() {
   clearInterval(timerInterval);
   const timerBox = $('#timer-box');
-  if (timerBox) timerBox.style.display = 'none';
+  if (timerBox) timerBox.classList.add('hidden');
 }
 
 /* ========================================================
@@ -1426,11 +1500,43 @@ document.addEventListener('click', async event => {
         `);
         break;
 
-      case 'toggle-user':
-        await api('/admin/users/' + id, 'PUT', { active: true });
-        refreshAdmin();
-        toast('Status da aluna atualizado.');
+      case 'toggle-user': {
+        const isCurrentlyActive = b.dataset.active === '1' || b.textContent.trim().toLowerCase().includes('suspender');
+        const nextState = !isCurrentlyActive;
+        await api('/admin/users/' + id, 'PUT', { active: nextState });
+        await refreshAdmin();
+        toast(nextState ? 'Aluna reativada com sucesso.' : 'Aluna suspensa com sucesso.');
         break;
+      }
+
+      case 'cycle-week':
+        currentWeek = (currentWeek % 4) + 1;
+        render();
+        toast(`Visualizando programação da Semana 0${currentWeek}`);
+        break;
+
+      case 'toggle-pip':
+        pipMode = (pipMode === 'iniciante' ? 'avancado' : 'iniciante');
+        render();
+        toast(pipMode === 'iniciante' ? 'Modo de visualização: Iniciante (Adaptado)' : 'Modo de visualização: Avançado');
+        break;
+
+      case 'copy-admin-msg': {
+        const textarea = b.previousElementSibling;
+        if (textarea && textarea.value) {
+          try {
+            await navigator.clipboard.writeText(textarea.value);
+            b.textContent = 'Mensagem Copiada! ✓';
+            toast('Dados de acesso copiados com sucesso!');
+          } catch {
+            textarea.select();
+            document.execCommand('copy');
+            b.textContent = 'Mensagem Copiada! ✓';
+            toast('Dados de acesso copiados com sucesso!');
+          }
+        }
+        break;
+      }
 
       case 'open-photos':
         showPhotos();
@@ -1601,7 +1707,7 @@ document.addEventListener('submit', async event => {
             A conta foi cadastrada no PostgreSQL. Envie os dados abaixo para a aluna:
           </p>
           <textarea readonly style="width: 100%; height: 110px; font-size: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 8px;">Olá ${data.name}! Seu acesso à plataforma Lara Castelli foi liberado.\n\nAcesse: https://app.laracastelli.mivaia.com\nLogin: ${data.email}\nSenha: ${data.password}</textarea>
-          <button class="btn full" style="margin-top: 12px;" onclick="navigator.clipboard.writeText(this.previousElementSibling.value); this.textContent='Copiado!';">Copiar Mensagem</button>
+          <button class="btn full" style="margin-top: 12px;" data-action="copy-admin-msg">Copiar Mensagem</button>
         `);
         break;
       }

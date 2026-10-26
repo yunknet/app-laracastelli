@@ -11,7 +11,7 @@ export const demoContent = [
     video: '/assets/treino-video-1.mp4',
     poster: '/assets/treino-poster-1.jpg',
     description: 'Treino completo focado em grandes grupos musculares, ativação metabólica e sustentação pós-emagrecimento. Acompanhe a execução guiada e ajuste as repetições de acordo com seu nível.',
-    reviewer: 'Dra. Lara Castelli • Fisiologia e Treinamento',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
     instructions: 'Realize o aquecimento antes de iniciar. Respeite os intervalos de descanso indicados pelo cronômetro.',
     exercises: [
       { name: 'Aquecimento articular e mobilidade de quadril', detail: '2 séries de 30 segundos cada lado', beginner: '30s suave', intermediate: '45s com amplitude total', advanced: '60s com carga corporal' },
@@ -32,7 +32,7 @@ export const demoContent = [
     video: '/assets/treino-video-2.mp4',
     poster: '/assets/treino-poster-2.jpg',
     description: 'Foco em membros inferiores, quadríceps, posteriores e firmeza de glúteos para recuperar o tônus muscular e sustentação da pele.',
-    reviewer: 'Dra. Lara Castelli • Fisiologia e Treinamento',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
     instructions: 'Mantenha a postura ereta e contraia o abdômen em todas as repetições.',
     exercises: [
       { name: 'Afundo com recuo (Passada atrás)', detail: '3 séries de 10 reps por perna', beginner: '8 reps com apoio para equilíbrio', intermediate: '10 reps livres', advanced: '12 reps com halteres/garrafas' },
@@ -51,7 +51,7 @@ export const demoContent = [
     video: '/assets/treino-video-3.mp4',
     poster: '/assets/treino-poster-3.jpg',
     description: 'Estímulo cardiovascular e resistência muscular combinados, mantendo o metabolismo ativo e preservando massa magra.',
-    reviewer: 'Dra. Lara Castelli • Fisiologia e Treinamento',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
     instructions: 'Mantenha um ritmo constante sem prender a respiração.',
     exercises: [
       { name: 'Polichinelo adaptado (sem impacto)', detail: '3 séries de 40 segundos', beginner: 'Passo lateral sem salto', intermediate: 'Salto leve e constante', advanced: 'Polichinelo com ritmo acelerado' },
@@ -70,7 +70,7 @@ export const demoContent = [
     video: '/assets/treino-video-4.mp4',
     poster: '/assets/treino-poster-4.jpg',
     description: 'Trabalho de fortalecimento de costas, ombros e braços para alinhamento postural e firmeza corporal.',
-    reviewer: 'Dra. Lara Castelli • Fisiologia e Treinamento',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
     instructions: 'Evite elevar os ombros em direção às orelhas durante os movimentos de puxada.',
     exercises: [
       { name: 'Desenvolvimento de ombros', detail: '3 séries de 12 repetições', beginner: '10 reps sem carga para padrão motor', intermediate: '12 reps com peso moderado', advanced: '15 reps com subida explosiva e descida em 3s' },
@@ -78,6 +78,125 @@ export const demoContent = [
       { name: 'Prancha lateral adaptada', detail: '3 séries de 20s por lado', beginner: 'Apoio de joelhos dobrados', intermediate: 'Apoio padrão nos pés', advanced: 'Com elevação da perna de cima' }
     ]
   },
+
+  // Treinos Mês 2 - Construção & Firmeza
+  {
+    id: 'w2_1',
+    kind: 'workout',
+    title: 'Treino A • Inferiores & Glúteos Avançado',
+    category: 'Mês 02',
+    month: 2,
+    minutes: 32,
+    level: 'Intermediário',
+    video: '/assets/treino-video-2.mp4',
+    poster: '/assets/treino-poster-2.jpg',
+    description: 'Evolução da sobrecarga muscular focada em sustentação da pele e firmeza de coxas e glúteos.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Concentre-se na fase excêntrica (descida lenta de 3 segundos).',
+    exercises: [
+      { name: 'Afundo búlgaro com pé elevado', detail: '3 séries de 10 reps cada perna', beginner: 'Pé apoiado no chão sem elevação', intermediate: 'Pé em elevação baixa', advanced: 'Pé elevado com carga nas mãos' },
+      { name: 'Elevação pélvica unilateral', detail: '3 séries de 12 repetições cada lado', beginner: 'Bilateral com pausa de 3s', intermediate: 'Unipodal suave', advanced: 'Unipodal com carga no quadril' },
+      { name: 'Agachamento sumô com isometria', detail: '3 séries de 12 reps + 10s isometria', beginner: '10 reps sem isometria', intermediate: '12 reps com 5s isometria', advanced: '12 reps com 10s isometria final' }
+    ]
+  },
+  {
+    id: 'w2_2',
+    kind: 'workout',
+    title: 'Treino B • Superiores & Dorsal Esculpida',
+    category: 'Mês 02',
+    month: 2,
+    minutes: 28,
+    level: 'Intermediário',
+    video: '/assets/treino-video-4.mp4',
+    poster: '/assets/treino-poster-4.jpg',
+    description: 'Fortalecimento da cadeia posterior para sustentação dos ombros e diminuição da flacidez no tríceps.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Aperte as escápulas no ponto máximo da contração dorsal.',
+    exercises: [
+      { name: 'Remada curvada pronada', detail: '3 séries de 12 repetições', beginner: 'Com garrafas leves', intermediate: 'Com cadência 2-1-2', advanced: 'Pausa de 2s na contração máxima' },
+      { name: 'Tríceps francês unilateral', detail: '3 séries de 12 reps por braço', beginner: 'Bilateral com apoio', intermediate: 'Unilateral com carga moderada', advanced: 'Com descida lenta e controlada' },
+      { name: 'Elevação lateral com controle de descida', detail: '3 séries de 15 repetições', beginner: '10 reps leves', intermediate: '12 reps com 3s descida', advanced: '15 reps com pico de 2s' }
+    ]
+  },
+  {
+    id: 'w2_3',
+    kind: 'workout',
+    title: 'Treino C • Fullbody Densidade & Queima',
+    category: 'Mês 02',
+    month: 2,
+    minutes: 34,
+    level: 'Intermediário',
+    video: '/assets/treino-video-1.mp4',
+    poster: '/assets/treino-poster-1.jpg',
+    description: 'Estímulo metabólico avançado combinando membros superiores e inferiores em cadeia fechada.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Mantenha a frequência cardíaca controlada e beba pequenos goles de água nos intervalos.',
+    exercises: [
+      { name: 'Agachamento com desenvolvimento militar combinado', detail: '3 séries de 12 reps', beginner: 'Movimentos separados', intermediate: 'Movimento fluido contínuo', advanced: 'Com velocidade controlada' },
+      { name: 'Stiff unilateral com equilíbrio', detail: '3 séries de 10 reps por lado', beginner: 'Apoio na parede', intermediate: 'Sem apoio corporal', advanced: 'Com haltere na mão oposta' },
+      { name: 'Prancha dinâmica militar (sobe e desce)', detail: '3 séries de 30 segundos', beginner: 'Apoiando joelhos', intermediate: 'Padrão nos pés', advanced: 'Com ritmo constante acelerado' }
+    ]
+  },
+
+  // Treinos Mês 3 - Definição & Tônus Máximo
+  {
+    id: 'w3_1',
+    kind: 'workout',
+    title: 'Treino A • Definição de Glúteos & Posterior',
+    category: 'Mês 03',
+    month: 3,
+    minutes: 35,
+    level: 'Avançado',
+    video: '/assets/treino-video-2.mp4',
+    poster: '/assets/treino-poster-2.jpg',
+    description: 'Lapidação final das curvas, densidade e sustentação muscular profunda para resultado duradouro.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Conexão mente-músculo: sinta cada fibra muscular recrutada em cada repetição.',
+    exercises: [
+      { name: 'Hip Thrust no banco / sofá com pico de contração', detail: '4 séries de 12 reps', beginner: 'No chão bilateral', intermediate: 'No banco com 2s pico', advanced: 'Com sobrecarga máxima e 3s pico' },
+      { name: 'Passada com passada profunda contínua', detail: '3 séries de 20 passos totais', beginner: 'Passo parado', intermediate: 'Passada contínua', advanced: 'Com carga nos braços' },
+      { name: 'Stiff bilateral com postura perfeita', detail: '4 séries de 12 repetições', beginner: 'Movimento sem peso', intermediate: 'Com carga moderada', advanced: 'Cadência lenta e amplitude profunda' }
+    ]
+  },
+  {
+    id: 'w3_2',
+    kind: 'workout',
+    title: 'Treino B • Ombros Lapidados & Braços Firmes',
+    category: 'Mês 03',
+    month: 3,
+    minutes: 30,
+    level: 'Avançado',
+    video: '/assets/treino-video-4.mp4',
+    poster: '/assets/treino-poster-4.jpg',
+    description: 'Definição e alinhamento visual de ombros, tríceps e abdômen superior.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Mantenha o tronco estável, evitando balanço lombar.',
+    exercises: [
+      { name: 'Desenvolvimento Arnold adaptado', detail: '3 séries de 12 repetições', beginner: 'Desenvolvimento padrão', intermediate: 'Arnold completo com halteres', advanced: 'Arnold com isometria no topo' },
+      { name: 'Tríceps mergulho no banco com pernas estendidas', detail: '3 séries de 12 repetições', beginner: 'Joelhos flexionados', intermediate: 'Pernas esticadas', advanced: 'Pernas elevadas em apoio' },
+      { name: 'Remada alta para trapézio e deltoides', detail: '3 séries de 15 repetições', beginner: 'Carga leve até altura do peito', intermediate: 'Cotovelos sempre acima das mãos', advanced: 'Com descida lenta de 4s' }
+    ]
+  },
+  {
+    id: 'w3_3',
+    kind: 'workout',
+    title: 'Treino C • Metabólico Intenso & Cintura Fina',
+    category: 'Mês 03',
+    month: 3,
+    minutes: 32,
+    level: 'Avançado',
+    video: '/assets/treino-video-3.mp4',
+    poster: '/assets/treino-poster-3.jpg',
+    description: 'Sessão desenhada para acentuar a cintura e queimar os últimos depósitos de gordura residual.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Concentre a expiração puxando o umbigo para dentro em cada esforço.',
+    exercises: [
+      { name: 'Sprawl adaptado sem impacto lombar', detail: '4 séries de 40 segundos', beginner: 'Passo a passo sem salto', intermediate: 'Ritmo contínuo com salto leve', advanced: 'Explosivo completo' },
+      { name: 'Vacuum abdominal com ativação do transverso', detail: '4 ciclos de 20s em apnéia', beginner: 'Deitada com joelhos dobrados', intermediate: 'Em quatro apoios', advanced: 'Em pé com mãos nos joelhos' },
+      { name: 'Prancha lateral dinâmica com elevação', detail: '3 séries de 30s cada lado', beginner: 'Com joelhos no chão', intermediate: 'Pés no chão', advanced: 'Com elevação da perna superior' }
+    ]
+  },
+
   // Bônus - Categorias especiais estilo Netflix (Screenshot 2)
   {
     id: 'b1',
@@ -90,7 +209,7 @@ export const demoContent = [
     video: '/assets/treino-video-1.mp4',
     poster: '/assets/treino-poster-1.jpg',
     description: 'Sessão suave para relaxamento muscular, melhora da postura, flexibilidade da coluna e alívio de tensões do dia a dia.',
-    reviewer: 'Equipe Lara Castelli',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
     exercises: [
       { name: 'Gato-Camelo para coluna', detail: '2 séries de 10 ciclos lentos', beginner: 'No seu limite confortável', intermediate: 'Respiração profunda e ampla', advanced: 'Com pausa de 2s em cada fase' },
       { name: 'Alongamento em 90/90 para quadril', detail: '2 séries de 45 segundos cada lado', beginner: 'Tronco reto apoiando mãos', intermediate: 'Leve inclinação à frente', advanced: 'Troca de lado dinâmica e fluida' }
@@ -107,7 +226,7 @@ export const demoContent = [
     video: '/assets/treino-video-3.mp4',
     poster: '/assets/treino-poster-3.jpg',
     description: 'Sessão curta e intensa de queima calórica sem comprometer a massa muscular conquistada.',
-    reviewer: 'Equipe Lara Castelli',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
     exercises: [
       { name: 'Escalador na bancada / chão', detail: '4 blocos de 30s ativo por 30s descanso', beginner: 'Na bancada sem pressa', intermediate: 'No chão com cadência constante', advanced: 'Aceleração máxima no chão' },
       { name: 'Agachamento com salto leve', detail: '4 blocos de 20s ativo por 40s descanso', beginner: 'Sem salto, subindo na ponta dos pés', intermediate: 'Salto suave amortecido', advanced: 'Salto explosivo' }
@@ -124,7 +243,7 @@ export const demoContent = [
     video: '/assets/treino-video-2.mp4',
     poster: '/assets/treino-poster-2.jpg',
     description: 'Treino cardiovascular de baixa intensidade e regeneração ativa para acelerar a circulação sem causar fadiga extrema.',
-    reviewer: 'Equipe Lara Castelli',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
     exercises: [
       { name: 'Passo alternado com elevação de joelho', detail: '3 minutos contínuos', beginner: 'Ritmo suave', intermediate: 'Ritmo constante', advanced: 'Braços ativos acima da cabeça' },
       { name: 'Caminhada dinâmica no lugar', detail: '3 minutos contínuos', beginner: 'Pisos macios ou tênis amortecido', intermediate: 'Movimento de braços coordenado', advanced: 'Alternando elevação rápida' }
@@ -138,7 +257,7 @@ export const demoContent = [
     title: 'Que bom ter você aqui',
     category: 'Comece aqui',
     description: 'Boas-vindas ao seu espaço exclusivo! Aqui você encontra tudo sobre a sua nova fase: seus treinos planejados mês a mês, a ficha interativa adaptável ao seu objetivo, orientações sobre alimentação saudável e acompanhamento direto da sua rotina.',
-    reviewer: 'Lara Castelli'
+    reviewer: 'Lara Castelli • Treinadora Especialista'
   },
   {
     id: 'g2',
@@ -146,7 +265,7 @@ export const demoContent = [
     title: 'Conheça a metodologia pós-emagrecimento',
     category: 'Comece aqui',
     description: 'Após emagrecer ou usar canetas emagrecedoras, o objetivo principal muda: não é mais perder peso a qualquer custo, e sim proteger e reconstruir massa muscular, sustentar o tônus da pele e estabelecer um metabolismo forte e autônomo. Nossos treinos foram desenhados especificamente para essa meta.',
-    reviewer: 'Dra. Lara Castelli'
+    reviewer: 'Lara Castelli • Treinadora Especialista'
   },
   {
     id: 'g3',
@@ -154,7 +273,7 @@ export const demoContent = [
     title: 'Faça sua avaliação e monte sua ficha',
     category: 'Comece aqui',
     description: 'Na aba "Ficha", defina se o seu foco agora é definição/emagrecimento ou ganho de massa magra, escolha se treinará 3, 4, 5 ou 6 dias na semana e siga o cronograma sugerido. Você tem total controle sobre seus dias de treino e descanso.',
-    reviewer: 'Equipe Técnica'
+    reviewer: 'Equipe Lara Castelli'
   },
   {
     id: 'g4',
@@ -162,7 +281,7 @@ export const demoContent = [
     title: 'Canetas emagrecedoras: dúvidas e cuidados',
     category: 'Seu cuidado',
     description: 'O uso de canetas deve ser sempre supervisionado pelo seu médico assistente. Neste aplicativo, você pode registrar as datas e dosagens prescritas pelo seu profissional para nunca esquecer a aplicação, além de acompanhar eventuais sintomas ou efeitos colaterais.',
-    reviewer: 'Dra. Lara Castelli'
+    reviewer: 'Lara Castelli • Treinadora Especialista'
   },
 
   // Receitas Práticas
@@ -264,31 +383,68 @@ export function suggestedDays(frequency = 4) {
   return map[frequency] || [0, 2, 4];
 }
 
-// Sugestão de distribuição padrão compatível com o print ProFit
+// Sugestão de distribuição padrão compatível com o print ProFit e diferenciada por objetivo
 export function suggestedSchedule(frequency = 4, goal = 'Emagrecer') {
+  const isMassa = goal === 'Massa Magra';
+
   if (frequency === 3) {
+    if (isMassa) {
+      return [
+        { day: 'Segunda', workoutId: 'w2', label: 'Inferiores (Ênfase Glúteos)', color: 'green' },
+        { day: 'Terça', workoutId: '', label: 'Descanso / Síntese Proteica', color: 'muted' },
+        { day: 'Quarta', workoutId: 'w4', label: 'Superiores & Costas (Força)', color: 'blue' },
+        { day: 'Quinta', workoutId: '', label: 'Descanso / Síntese Proteica', color: 'muted' },
+        { day: 'Sexta', workoutId: 'w1', label: 'Fullbody Hipertrofia', color: 'purple' },
+        { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
+        { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
+      ];
+    }
     return [
-      { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody 1)', color: 'purple' },
-      { day: 'Terça', workoutId: '', label: 'Descanso', color: 'muted' },
-      { day: 'Quarta', workoutId: 'w2', label: 'Treino B (Inferiores 1)', color: 'green' },
-      { day: 'Quinta', workoutId: '', label: 'Descanso', color: 'muted' },
-      { day: 'Sexta', workoutId: 'w3', label: 'Treino C (Fullbody 2)', color: 'pink' },
+      { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody Queima 1)', color: 'purple' },
+      { day: 'Terça', workoutId: '', label: 'Descanso Ativo', color: 'muted' },
+      { day: 'Quarta', workoutId: 'w2', label: 'Treino B (Inferiores & Firmeza)', color: 'green' },
+      { day: 'Quinta', workoutId: '', label: 'Descanso Ativo', color: 'muted' },
+      { day: 'Sexta', workoutId: 'w3', label: 'Treino C (Fullbody Queima 2)', color: 'pink' },
       { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
       { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
     ];
   }
+
   if (frequency === 5) {
+    if (isMassa) {
+      return [
+        { day: 'Segunda', workoutId: 'w2', label: 'Inferiores (Foco Quadríceps)', color: 'green' },
+        { day: 'Terça', workoutId: 'w4', label: 'Superiores (Costas & Ombros)', color: 'blue' },
+        { day: 'Quarta', workoutId: 'w1', label: 'Posteriores & Glúteos', color: 'purple' },
+        { day: 'Quinta', workoutId: 'b1', label: 'Mobilidade & Liberação', color: 'peach' },
+        { day: 'Sexta', workoutId: 'w3', label: 'Fullbody Hipertrofia Final', color: 'pink' },
+        { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
+        { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
+      ];
+    }
     return [
       { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody 1)', color: 'purple' },
       { day: 'Terça', workoutId: 'w2', label: 'Treino B (Inferiores)', color: 'green' },
       { day: 'Quarta', workoutId: 'w4', label: 'Treino D (Superiores)', color: 'blue' },
-      { day: 'Quinta', workoutId: 'b1', label: 'Bônus (Mobilidade)', color: 'peach' },
+      { day: 'Quinta', workoutId: 'b2', label: 'HIIT Express Queima', color: 'lime' },
       { day: 'Sexta', workoutId: 'w3', label: 'Treino C (Fullbody 2)', color: 'pink' },
       { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
       { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
     ];
   }
+
   if (frequency === 6) {
+    if (isMassa) {
+      return [
+        { day: 'Segunda', workoutId: 'w2', label: 'Inferiores A (Glúteos & Quadríceps)', color: 'green' },
+        { day: 'Terça', workoutId: 'w4', label: 'Superiores A (Puxadas & Ombros)', color: 'blue' },
+        { day: 'Quarta', workoutId: 'w1', label: 'Inferiores B (Posteriores & Panturrilha)', color: 'purple' },
+        { day: 'Quinta', workoutId: 'w3', label: 'Superiores B (Empurrar & Braços)', color: 'pink' },
+        { day: 'Sexta', workoutId: 'w2', label: 'Glúteos Isolados & Abdômen', color: 'green' },
+        { day: 'Sábado', workoutId: 'b1', label: 'Mobilidade Articular', color: 'peach' },
+        { day: 'Domingo', workoutId: '', label: 'Descanso Total', color: 'muted' }
+      ];
+    }
     return [
       { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody 1)', color: 'purple' },
       { day: 'Terça', workoutId: 'w2', label: 'Treino B (Inferiores)', color: 'green' },
@@ -299,7 +455,19 @@ export function suggestedSchedule(frequency = 4, goal = 'Emagrecer') {
       { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
     ];
   }
+
   // Padrão 4x por semana (Exatamente como Screenshot 5 do ProFit)
+  if (isMassa) {
+    return [
+      { day: 'Segunda', workoutId: 'w2', label: 'Inferiores (Ênfase Glúteos)', color: 'green' },
+      { day: 'Terça', workoutId: 'w4', label: 'Superiores & Braços (Hipertrofia)', color: 'blue' },
+      { day: 'Quarta', workoutId: '', label: 'Descanso / Recuperação Muscular', color: 'muted' },
+      { day: 'Quinta', workoutId: 'w1', label: 'Inferiores (Posterior & Core)', color: 'purple' },
+      { day: 'Sexta', workoutId: 'w3', label: 'Superiores & Peitoral/Costas', color: 'pink' },
+      { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
+      { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
+    ];
+  }
   return [
     { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody 1)', color: 'purple' },
     { day: 'Terça', workoutId: 'w2', label: 'Treino B (Inferiores 1)', color: 'green' },

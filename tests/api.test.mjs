@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
@@ -37,7 +38,9 @@ before(async () => {
     await db.run('INSERT INTO users(id,name,email,password,role) VALUES(?,?,?,?,?)', randomUUID(), name, email, await passwordHash('Test-password-123!'), role);
   }
 
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
   server = spawn(process.execPath, ['server/index.mjs'], {
+    cwd: repoRoot,
     env: { ...process.env, PORT: '5199', APP_ORIGIN: origin },
     stdio: 'pipe'
   });
@@ -275,4 +278,141 @@ test('webhook generates firstName123456 password and provisions access', async (
   const statuses = burstResults.map(r => r.status);
   // Todas as 3 devem ter status 200 ou 201 (nenhuma pode dar 500)
   assert.ok(statuses.every(s => s === 200 || s === 201), `Rajada falhou com status: ${statuses.join(',')}`);
+});
+
+test('webhook ignores pending payments without creating active accounts', async () => {
+  const pendingPayload = {
+    Event: 'Payment_Pending',
+    Buyer: { Name: 'Aluna Pendente', Email: 'pendente@test.com' }
+  };
+  const res = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pendingPayload)
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.status, 'pending');
+
+  // Login MUST FAIL because pending payment does not create an active account
+  const loginRes = await request('/login', {
+    method: 'POST',
+    body: { email: 'pendente@test.com', password: 'metodolara' }
+  });
+  assert.equal(loginRes.status, 401);
+});
+
+test('webhook idempotency prevents duplicated activation from same transaction', async () => {
+  const txPayload = {
+    Event: 'Purchase_Order_Confirmed',
+    Transaction: { Id: 'tx-999-unique' },
+    Buyer: { Name: 'Aluna Unica', Email: 'unica@test.com' }
+  };
+  const firstRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(txPayload)
+  });
+  assert.equal(firstRes.status, 201);
+
+  // Envio duplicado idêntico
+  const secondRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(txPayload)
+  });
+  assert.equal(secondRes.status, 200);
+  const secondData = await secondRes.json();
+  assert.match(secondData.message, /já processado/i);
+});
+
+test('admin can toggle user suspension with active true/false', async () => {
+  const alice = await db.get('SELECT id, active FROM users WHERE email=?', 'alice@test.local');
+  assert.ok(alice);
+  assert.equal(alice.active, 1);
+
+  // Admin suspende Alice (active: false)
+  const suspendRes = await request('/admin/users/' + alice.id, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { active: false }
+  });
+  assert.equal(suspendRes.status, 200);
+
+  const suspendedAlice = await db.get('SELECT active FROM users WHERE id=?', alice.id);
+  assert.equal(suspendedAlice.active, 0);
+
+  // Alice suspensa não consegue logar
+  const aliceLogin = await request('/login', {
+    method: 'POST',
+    body: { email: 'alice@test.local', password: 'Test-password-123!' }
+  });
+  assert.equal(aliceLogin.status, 401);
+
+  // Admin reativa Alice (active: true)
+  const reactivateRes = await request('/admin/users/' + alice.id, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { active: true }
+  });
+  assert.equal(reactivateRes.status, 200);
+
+  const activeAlice = await db.get('SELECT active FROM users WHERE id=?', alice.id);
+  assert.equal(activeAlice.active, 1);
+});
+
+test('suggestedSchedule differentiates Emagrecer and Massa Magra', async () => {
+  const { suggestedSchedule } = await import('../public/data.js');
+  const emagrecerSchedule = suggestedSchedule(4, 'Emagrecer');
+  const massaSchedule = suggestedSchedule(4, 'Massa Magra');
+
+  assert.notDeepEqual(emagrecerSchedule, massaSchedule);
+  assert.equal(emagrecerSchedule.length, 7);
+  assert.equal(massaSchedule.length, 7);
+});
+
+test('webhook enforces authentication when secret is configured', async () => {
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+  const authServer = spawn(process.execPath, ['server/index.mjs'], {
+    cwd: repoRoot,
+    env: { ...process.env, PORT: '5198', APP_ORIGIN: 'http://localhost:5198', WEBHOOK_SECRET: 'super-secret-token' },
+    stdio: 'ignore'
+  });
+
+  for (let i = 0; i < 40; i++) {
+    try {
+      const h = await fetch('http://localhost:5198/api/health');
+      if (h.status === 200) break;
+    } catch {}
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  try {
+    // 1. Sem token fornecido -> DEVE retornar 401
+    const noTokenRes = await fetch('http://localhost:5198/api/webhook/lastlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Event: 'Purchase_Order_Confirmed', Buyer: { Email: 'hacker@test.com' } })
+    });
+    assert.equal(noTokenRes.status, 401);
+
+    // 2. Token incorreto -> DEVE retornar 401
+    const wrongTokenRes = await fetch('http://localhost:5198/api/webhook/lastlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-webhook-token': 'wrong-token' },
+      body: JSON.stringify({ Event: 'Purchase_Order_Confirmed', Buyer: { Email: 'hacker@test.com' } })
+    });
+    assert.equal(wrongTokenRes.status, 401);
+
+    // 3. Token correto -> DEVE autenticar e criar (201)
+    const validRes = await fetch('http://localhost:5198/api/webhook/lastlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-webhook-token': 'super-secret-token' },
+      body: JSON.stringify({ Event: 'Purchase_Order_Confirmed', Buyer: { Name: 'Aluna Autenticada', Email: 'autenticada@test.com' } })
+    });
+    assert.equal(validRes.status, 201);
+  } finally {
+    authServer.kill();
+    await new Promise(r => authServer.once('exit', r));
+  }
 });

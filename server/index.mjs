@@ -21,7 +21,7 @@ app.use(helmet({
     directives: {
       'default-src': ["'self'"],
       'script-src': ["'self'"],
-      'style-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'"],
       'img-src': ["'self'", 'data:', 'https:'],
       'media-src': ["'self'", 'https:'],
       'connect-src': ["'self'"],
@@ -51,12 +51,20 @@ const webhookHandler = async (req, res) => {
       || req.body?.WebhookToken;
 
     const expectedSecret = process.env.WEBHOOK_SECRET || process.env.LASTLINK_TOKEN;
-    if (expectedSecret && authHeader && authHeader !== expectedSecret) {
-      return res.status(401).json({ error: 'Token de webhook inválido.' });
+    if (expectedSecret && (!authHeader || authHeader !== expectedSecret)) {
+      return res.status(401).json({ error: 'Token de webhook não fornecido ou inválido.' });
     }
 
     const body = req.body || {};
     const event = body.Event || body.event || body.type || 'purchase';
+
+    // Verificação de Produto (se LASTLINK_PRODUCT_ID estiver configurado no ambiente)
+    const expectedProductId = process.env.LASTLINK_PRODUCT_ID || process.env.PRODUCT_ID;
+    const productId = body.Product?.Id || body.Product?.id || body.product?.id || body.productId || body.product_id || body.Data?.Product?.Id || body.data?.product?.id;
+    if (expectedProductId && productId && String(productId).trim() !== String(expectedProductId).trim()) {
+      console.log(`[Webhook] Evento ignorado: produto ${productId} não corresponde ao esperado ${expectedProductId}`);
+      return res.json({ ok: true, message: 'Evento ignorado: produto não correspondente ao app.', productId });
+    }
 
     // Extração flexível de e-mail e nome (suporta Lastlink, Hotmart, Kiwify, Stripe, etc.)
     const email = (
@@ -110,6 +118,21 @@ const webhookHandler = async (req, res) => {
       return res.status(400).json({ error: 'E-mail não encontrado ou inválido no payload.' });
     }
 
+    // Identificador da transação para controle de idempotência e ordenação
+    const transactionId = String(
+      body.Transaction?.Id ||
+      body.Transaction?.id ||
+      body.transaction?.id ||
+      body.transactionId ||
+      body.transaction_id ||
+      body.orderId ||
+      body.order_id ||
+      body.Data?.Transaction?.Id ||
+      body.Data?.Order?.Id ||
+      body.id ||
+      ''
+    ).trim();
+
     // Tratamento de cancelamento / reembolso / estorno / fim de acesso
     const isRevoke = /refund|chargeback|cancel|expir|reembols|estorn|fim.*libera|remo.*acesso|ended|revok/i.test(event);
     if (isRevoke) {
@@ -119,7 +142,37 @@ const webhookHandler = async (req, res) => {
         await db.run('DELETE FROM sessions WHERE user_id=?', existing.id);
         console.log(`[Webhook Lastlink] Acesso revogado/reembolsado: ${email} (evento: ${event})`);
       }
+      const recordId = transactionId || randomUUID();
+      try {
+        await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
+      } catch {}
       return res.json({ ok: true, message: 'Acesso revogado com sucesso.', email, event });
+    }
+
+    // Eventos de pagamento pendente (NÃO devem liberar acesso prematuro)
+    const isPending = /pending|aguardando|waiting|abandon|boleto|pix_created|fatura.*criada|tentativa/i.test(event);
+    if (isPending) {
+      console.log(`[Webhook] Pagamento pendente registrado para ${email} (evento: ${event}). Acesso não liberado.`);
+      const recordId = transactionId || randomUUID();
+      try {
+        await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
+      } catch {}
+      return res.json({ ok: true, status: 'pending', message: 'Pagamento pendente. O acesso será liberado após a confirmação da transação.' });
+    }
+
+    // Eventos explicitamente aprovados
+    const isApproved = /purchase_order_confirmed|order_approved|payment_approved|compra[ _]completa|recurrent_payment|pagamento.*efetuado|product_access_started|in[ií]cio.*libera[çc][aã]o|approved|complete|paid|checkout\.session\.completed|invoice\.paid|payment_intent\.succeeded|^purchase$/i.test(event);
+    if (!isApproved) {
+      console.log(`[Webhook] Evento não qualificado para liberação automática de acesso: ${event} (${email})`);
+      return res.json({ ok: true, status: 'unhandled', message: 'Evento recebido, mas não elegível para liberação automática de acesso.', event });
+    }
+
+    // Controle de eventos repetidos / idempotência
+    if (transactionId) {
+      const alreadyProcessed = await db.get('SELECT id FROM webhook_events WHERE id=? AND event=?', transactionId, event);
+      if (alreadyProcessed) {
+        return res.json({ ok: true, message: 'Evento já processado anteriormente.', transactionId, event });
+      }
     }
 
     // Aprovação de compra / ativação de aluna
@@ -131,7 +184,12 @@ const webhookHandler = async (req, res) => {
     if (existing) {
       if (!existing.active) {
         await db.run('UPDATE users SET active=1 WHERE id=?', existing.id);
+        console.log(`[Webhook] Aluna reativada com sucesso: ${email}`);
       }
+      const recordId = transactionId || randomUUID();
+      try {
+        await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
+      } catch {}
       return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: existing.id });
     }
 
@@ -161,6 +219,11 @@ const webhookHandler = async (req, res) => {
       }
       throw insertErr;
     }
+
+    const recordId = transactionId || randomUUID();
+    try {
+      await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
+    } catch {}
 
     console.log(`[Webhook] Nova aluna cadastrada com sucesso: ${email} (${name}) com senha padrão`);
     res.status(201).json({
