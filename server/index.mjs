@@ -9,6 +9,7 @@ import { createWriteStream } from 'node:fs';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { db, initDb, mediaRoot, passwordHash, passwordMatches } from './db.mjs';
+import { registerTrainingProgram, isProgramWorkoutId } from './training-program.mjs';
 
 const app = express(), production = process.env.NODE_ENV === 'production';
 const origin = process.env.APP_ORIGIN || 'http://localhost:5190';
@@ -350,6 +351,7 @@ app.use('/api', async (req, res, next) => {
 
 const auth = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Entre para continuar.' });
 const admin = (req, res, next) => req.user?.role === 'admin' ? next() : res.status(403).json({ error: 'Acesso restrito à administração.' });
+registerTrainingProgram(app, { db, auth });
 const text = (v, max = 500) => typeof v === 'string' ? v.trim().slice(0, max) : '';
 const fail = (res, message) => res.status(400).json({ error: message });
 
@@ -444,7 +446,7 @@ app.post('/api/logout', auth, async (req, res, next) => {
 app.get('/api/content', auth, async (req, res, next) => {
   try {
     const rows = await db.all('SELECT id, kind, body FROM content WHERE published=1');
-    res.json(rows.map(r => ({ ...JSON.parse(r.body), id: r.id, kind: r.kind })));
+    res.json(rows.filter(r => !isProgramWorkoutId(r.id)).map(r => ({ ...JSON.parse(r.body), id: r.id, kind: r.kind })));
   } catch (err) {
     next(err);
   }
@@ -717,7 +719,7 @@ app.delete('/api/admin/content/:id', auth, admin, async (req, res, next) => {
 });
 
 if (!production) {
-  app.get(['/qa', '/qa.js', '/qa.css'], (req, res) => {
+  app.get(['/qa', '/qa.js', '/qa.css', '/qa-player.html', '/qa-player.js'], (req, res) => {
     res.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; frame-src 'self'");
     res.sendFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../tests/' + (req.path === '/qa' ? 'qa.html' : req.path.slice(1))));
   });

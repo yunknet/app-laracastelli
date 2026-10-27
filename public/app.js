@@ -1,4 +1,5 @@
 import { demoContent, blankState, dateKey, weekDays, suggestedSchedule } from './data.js';
+import { programView, validateProgramSettings } from './program-view.js';
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -59,6 +60,21 @@ let currentWeek = 1;
 let search = '';
 let saveQueue = Promise.resolve();
 let showSetupForm = false;
+let programConfig = { enabled: false };
+let programCatalogue = [], programLoaded = false, programLoading = null, programError = "";
+async function refreshProgramConfig() {
+  programConfig = await api("/training-program/config").catch(() => ({ enabled: false }));
+  programCatalogue = []; programLoaded = false; programError = ""; programLoading = null;
+}
+async function loadProgramCatalogue() {
+  const owner = user?.id;
+  try {
+    const result = await api("/training-program/catalogue");
+    if (owner !== user?.id) return;
+    programCatalogue = result.workouts; programLoaded = true; programError = "";
+  } catch (error) { if (owner === user?.id) programError = error.message; }
+  finally { if (owner === user?.id) { programLoading = null; if (page === "programa") render(); } }
+}
 
 // Cronômetros de Treino e Descanso (Screenshots 3 e 4)
 let timerInterval = null;
@@ -135,7 +151,7 @@ function render() {
     activeWorkoutId = params.get('id') || workouts()[0]?.id;
     page = 'workout';
   } else {
-    page = hash;
+    page = hash === "programa" || hash.startsWith("programa?") ? "programa" : hash;
   }
 
   if (!user) {
@@ -148,7 +164,7 @@ function render() {
       ${brand()}
       <p class="nav-label">MENU PRINCIPAL</p>
       <nav class="nav">
-        ${navs.map(([id, label, iconName]) => `
+        ${[...navs, ...(programConfig.enabled ? [["programa", "Programa 12 semanas", "calendar"]] : [])].map(([id, label, iconName]) => `
           <a href="#${id}" class="${page === id ? 'active' : ''}">
             ${icon(iconName)}
             ${label}
@@ -234,6 +250,7 @@ function render() {
   if (page === 'care') refreshTickets();
   if (page === 'admin') refreshAdmin();
   if (page === 'workout') attachVideoTracker();
+  if (page === 'programa' && programConfig.enabled && !programLoaded && !programLoading && !programError) programLoading = loadProgramCatalogue();
 }
 
 function attachVideoTracker() {
@@ -291,6 +308,7 @@ function attachVideoTracker() {
 function pageTitle() {
   switch (page) {
     case 'home': return 'Início';
+    case 'programa': return 'Programa 12 semanas';
     case 'training': return 'Seus Treinos';
     case 'ficha': return 'Ficha Interativa';
     case 'workout': return 'Player de Treino';
@@ -368,6 +386,7 @@ function choiceCard(action, val, currentVal, iconEmoji, title, sub = '') {
 function pageContent() {
   switch (page) {
     case 'home': return homeView();
+    case 'programa': return programView({ state, config: programConfig, catalogue: programCatalogue, loaded: programLoaded, error: programError });
     case 'training': return trainingView();
     case 'ficha': return fichaView();
     case 'workout': return workoutPlayerView();
@@ -407,6 +426,7 @@ function homeView() {
       </div>
     </div>
 
+    ${programConfig.enabled ? `<div class="program-entry"><a class="btn light" href="#programa">Abrir programa de 12 semanas ↗</a></div>` : ""}
     <!-- Indicadores Rápidos -->
     <div class="quick-row">
       <div class="quick-card">
@@ -838,7 +858,7 @@ function workoutPlayerView() {
           ${isCompletedToday ? 'Aula concluída hoje' : 'Marcar como concluída'}
         </button>
 
-        <div style="display: flex; gap: 8px;">
+        <div class="lesson-timing-controls">
           <button class="btn light" data-action="start-timer" data-seconds="10" data-type="work" title="Iniciar contagem">
             ⏱ Cronômetro
           </button>
@@ -1360,7 +1380,18 @@ document.addEventListener('click', async event => {
 
   try {
     switch (action) {
+      case 'program-retry':
+        programError = ''; programLoaded = false; render(); break;
+      case 'program-complete': {
+        if (!programConfig.enabled || !programCatalogue.some(w => w.id === id)) throw Error('Treino indisponível.');
+        const oldCompleted = [...state.completed];
+        const index = state.completed.findIndex(c => c.id === id && c.date === today());
+        if (index >= 0) state.completed.splice(index, 1); else state.completed.push({ id, date: today() });
+        try { await save(); } catch (error) { state.completed = oldCompleted; throw error; }
+        render(); toast(index >= 0 ? 'Conclusão desfeita.' : 'Treino do programa registrado.'); break;
+      }
       case 'demo':
+        programConfig = { enabled: false }; programCatalogue = []; programLoaded = false;
         demo = true;
         sessionStorage.setItem('lara-demo', '1');
         loadDemo();
@@ -1373,6 +1404,7 @@ document.addEventListener('click', async event => {
         demo = false;
         sessionStorage.removeItem('lara-demo');
         user = null;
+        programConfig = { enabled: false }; programCatalogue = []; programLoaded = false;
         state = blankState();
         renderLogin();
         break;
@@ -1638,6 +1670,13 @@ document.addEventListener('submit', async event => {
 
   try {
     switch (kind) {
+      case 'program-setup': {
+        if (!programConfig.enabled) throw Error('Programa não ativado.');
+        const previous = state.profile.trainingProgram;
+        state.profile.trainingProgram = validateProgramSettings(data);
+        try { await save(); } catch (error) { if (previous === undefined) delete state.profile.trainingProgram; else state.profile.trainingProgram = previous; throw error; }
+        location.hash = 'programa'; render(); toast('Preferências do programa salvas.'); break;
+      }
       case 'login': {
         const r = await api('/login', 'POST', data);
         user = r.user;
@@ -1646,6 +1685,7 @@ document.addEventListener('submit', async event => {
         state = { ...blankState(), ...await api('/state') };
         const serverContent = await api('/content');
         content = (Array.isArray(serverContent) && serverContent.length > 0) ? serverContent : structuredClone(demoContent);
+      await refreshProgramConfig();
         if (!state.profile?.setupDone) showSetupForm = true;
         location.hash = 'home';
         render();
@@ -1797,6 +1837,7 @@ try {
       state = { ...blankState(), ...await api('/state') };
       const serverContent = await api('/content');
       content = (Array.isArray(serverContent) && serverContent.length > 0) ? serverContent : structuredClone(demoContent);
+      await refreshProgramConfig();
       if (!state.profile?.setupDone) showSetupForm = true;
     }
   }

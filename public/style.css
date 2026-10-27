@@ -778,9 +778,14 @@ svg.icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-w
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   border-bottom: 1px solid var(--line);
   background: var(--white);
 }
+.lesson-timing-controls { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.lesson-actions > .btn-complete { justify-content: center; min-width: 0; min-height: 44px; white-space: normal; }
+.lesson-timing-controls > .btn { min-width: 0; min-height: 44px; white-space: normal; justify-content: center; }
 .btn-complete {
   padding: 10px 20px;
   border-radius: 20px;
@@ -1310,4 +1315,20 @@ dialog::backdrop { background: rgba(15, 33, 26, 0.7); backdrop-filter: blur(4px)
 
   .video-pip { width: 85px; top: 10px; left: 10px; }
   .timer-countdown { font-size: 52px; }
+  .lesson-actions { display: grid; grid-template-columns: minmax(0, 1fr); padding: 14px; gap: 10px; }
+  .lesson-actions > .btn-complete { width: 100%; }
+  .lesson-timing-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lesson-timing-controls > .btn { width: 100%; padding: 10px 8px; font-size: 12px; }
+  .lesson-details { padding: 16px; }
+  .player-topbar { gap: 10px; padding: 14px; }
+  .player-topbar > div, .lesson-item > span, .exercise-row > div { min-width: 0; overflow-wrap: anywhere; }
+  .player-topbar > div:last-child:empty { display: none; }
+  .accordion-header { gap: 8px; flex-wrap: wrap; padding: 12px; }
+  .accordion-body { padding: 12px; }
+  .timer-overlay { padding: 10px; }
+  .timer-overlay .timer-countdown { font-size: clamp(28px, 9vw, 42px); margin-bottom: 4px; }
+  .timer-overlay svg.timer-bottle-icon { width: 24px; height: 24px; margin-bottom: 4px; }
+  .timer-overlay .timer-msg { font-size: 10px; letter-spacing: 1px; margin-bottom: 8px; text-align: center; }
+  .timer-controls { width: 100%; justify-content: center; gap: 8px; }
+  .timer-controls > .btn { min-width: 0; min-height: 40px; padding: 8px; font-size: 11px; white-space: normal; }
 }
