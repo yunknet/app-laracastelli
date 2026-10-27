@@ -10,6 +10,7 @@ if [ -f .env ]; then
 fi
 
 mkdir -p backups
+chmod 777 backups 2>/dev/null || true
 LARA_BACKUP_STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 
 # Backup PostgreSQL via pg_dump se o serviço db do compose estiver rodando
@@ -20,7 +21,7 @@ fi
 
 # Snapshot via aplicação (JSON export direto na pasta backups compartilhada)
 if docker compose ps -q app > /dev/null 2>&1 && [ -n "$(docker compose ps -q app 2>/dev/null)" ]; then
-  docker compose exec -T app node server/backup.mjs
+  docker compose exec -T app node server/backup.mjs || true
 fi
 
 # Backup de mídias

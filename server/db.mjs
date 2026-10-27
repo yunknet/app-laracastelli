@@ -177,13 +177,24 @@ export async function initDb() {
         mime TEXT NOT NULL,
         data BYTEA NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        email TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS orders_email ON orders(email);
       CREATE TABLE IF NOT EXISTS webhook_events (
         id TEXT PRIMARY KEY,
+        transaction_id TEXT,
         event TEXT NOT NULL,
         email TEXT NOT NULL,
         payload TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE INDEX IF NOT EXISTS webhook_events_tx ON webhook_events(transaction_id);
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
     `);
   } else {
@@ -198,7 +209,10 @@ export async function initDb() {
       CREATE TABLE IF NOT EXISTS comments(id TEXT PRIMARY KEY,post_id TEXT REFERENCES posts(id) ON DELETE CASCADE,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS tickets(id TEXT PRIMARY KEY,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,reply TEXT NOT NULL DEFAULT '',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS photos(id TEXT PRIMARY KEY,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,date TEXT NOT NULL,mime TEXT NOT NULL,data BLOB NOT NULL);
-      CREATE TABLE IF NOT EXISTS webhook_events(id TEXT PRIMARY KEY,event TEXT NOT NULL,email TEXT NOT NULL,payload TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,user_id TEXT REFERENCES users(id) ON DELETE SET NULL,email TEXT NOT NULL,status TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE INDEX IF NOT EXISTS orders_email ON orders(email);
+      CREATE TABLE IF NOT EXISTS webhook_events(id TEXT PRIMARY KEY,transaction_id TEXT,event TEXT NOT NULL,email TEXT NOT NULL,payload TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE INDEX IF NOT EXISTS webhook_events_tx ON webhook_events(transaction_id);
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
     `);
   }

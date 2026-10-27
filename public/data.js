@@ -137,6 +137,25 @@ export const demoContent = [
       { name: 'Prancha dinâmica militar (sobe e desce)', detail: '3 séries de 30 segundos', beginner: 'Apoiando joelhos', intermediate: 'Padrão nos pés', advanced: 'Com ritmo constante acelerado' }
     ]
   },
+  {
+    id: 'w2_4',
+    kind: 'workout',
+    title: 'Treino D • Core, Postura & Cintura',
+    category: 'Mês 02',
+    month: 2,
+    minutes: 25,
+    level: 'Intermediário',
+    video: '/assets/treino-video-3.mp4',
+    poster: '/assets/treino-poster-3.jpg',
+    description: 'Estabilização profunda da musculatura abdominal, afinamento da linha da cintura e prevenção de dores posturais.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Ative a respiração diafragmática em todas as contrações.',
+    exercises: [
+      { name: 'Deadbug com ativação abdominal contínua', detail: '3 séries de 12 repetições alternadas', beginner: 'Com joelhos flexionados apoiando o calcanhar', intermediate: 'Pernas a 90 graus', advanced: 'Com extensão completa e halter leve' },
+      { name: 'Perdigueiro cadenciado com isometria', detail: '3 séries de 10 reps por lado', beginner: 'Sem isometria', intermediate: 'Pausa de 2s no topo', advanced: 'Com sobrecarga no tornozelo' },
+      { name: 'Prancha lateral com elevação de quadril', detail: '3 séries de 25 segundos cada lado', beginner: 'Apoiando joelho inferior', intermediate: 'Padrão estendido', advanced: 'Com elevação da perna superior' }
+    ]
+  },
 
   // Treinos Mês 3 - Definição & Tônus Máximo
   {
@@ -194,6 +213,25 @@ export const demoContent = [
       { name: 'Sprawl adaptado sem impacto lombar', detail: '4 séries de 40 segundos', beginner: 'Passo a passo sem salto', intermediate: 'Ritmo contínuo com salto leve', advanced: 'Explosivo completo' },
       { name: 'Vacuum abdominal com ativação do transverso', detail: '4 ciclos de 20s em apnéia', beginner: 'Deitada com joelhos dobrados', intermediate: 'Em quatro apoios', advanced: 'Em pé com mãos nos joelhos' },
       { name: 'Prancha lateral dinâmica com elevação', detail: '3 séries de 30s cada lado', beginner: 'Com joelhos no chão', intermediate: 'Pés no chão', advanced: 'Com elevação da perna superior' }
+    ]
+  },
+  {
+    id: 'w3_4',
+    kind: 'workout',
+    title: 'Treino D • Abdômen Esculpido & Sustentação',
+    category: 'Mês 03',
+    month: 3,
+    minutes: 26,
+    level: 'Avançado',
+    video: '/assets/treino-video-1.mp4',
+    poster: '/assets/treino-poster-1.jpg',
+    description: 'Protocolo de alta densidade muscular para modelar a parede abdominal e sustentar a região lombar.',
+    reviewer: 'Lara Castelli • Treinadora Especialista',
+    instructions: 'Mantenha o abdômen travado e execute movimentos lentos com amplitude máxima.',
+    exercises: [
+      { name: 'Abdominal infra com pernas estendidas', detail: '3 séries de 15 repetições', beginner: 'Com pernas flexionadas', intermediate: 'Com descida lenta de 3s', advanced: 'Sem encostar o calcanhar no solo' },
+      { name: 'Prancha russa com rotação de tronco', detail: '3 séries de 20 giros totais', beginner: 'Com pés apoiados', intermediate: 'Pés suspensos', advanced: 'Com carga no peito' },
+      { name: 'Elevação pélvica deitada com isometria final', detail: '3 séries de 15 reps + 15s isometria', beginner: '10 reps sem isometria', intermediate: '12 reps com 10s', advanced: '15 reps com 15s no pico' }
     ]
   },
 
@@ -383,28 +421,38 @@ export function suggestedDays(frequency = 4) {
   return map[frequency] || [0, 2, 4];
 }
 
-// Sugestão de distribuição padrão compatível com o print ProFit e diferenciada por objetivo
-export function suggestedSchedule(frequency = 4, goal = 'Emagrecer') {
+// Sugestão de distribuição padrão compatível com o print ProFit e diferenciada por objetivo e mês
+export function suggestedSchedule(frequency = 4, goal = 'Emagrecer', month = 1, week = 1) {
   const isMassa = goal === 'Massa Magra';
+  const m = Number(month) || 1;
+  const w = Number(week) || 1;
+
+  // Seleciona os IDs de treinos correspondentes ao mês
+  const wA = m === 2 ? 'w2_1' : m === 3 ? 'w3_1' : 'w1';
+  const wB = m === 2 ? 'w2_2' : m === 3 ? 'w3_2' : 'w2';
+  const wC = m === 2 ? 'w2_3' : m === 3 ? 'w3_3' : 'w3';
+  const wD = m === 2 ? 'w2_4' : m === 3 ? 'w3_4' : 'w4';
+
+  const mTag = `(Mês 0${m})`;
 
   if (frequency === 3) {
     if (isMassa) {
       return [
-        { day: 'Segunda', workoutId: 'w2', label: 'Inferiores (Ênfase Glúteos)', color: 'green' },
+        { day: 'Segunda', workoutId: wB, label: `Inferiores • Ênfase Glúteos ${mTag}`, color: 'green' },
         { day: 'Terça', workoutId: '', label: 'Descanso / Síntese Proteica', color: 'muted' },
-        { day: 'Quarta', workoutId: 'w4', label: 'Superiores & Costas (Força)', color: 'blue' },
+        { day: 'Quarta', workoutId: wD, label: `Superiores & Postura ${mTag}`, color: 'blue' },
         { day: 'Quinta', workoutId: '', label: 'Descanso / Síntese Proteica', color: 'muted' },
-        { day: 'Sexta', workoutId: 'w1', label: 'Fullbody Hipertrofia', color: 'purple' },
+        { day: 'Sexta', workoutId: wA, label: `Fullbody Hipertrofia ${mTag}`, color: 'purple' },
         { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
         { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
       ];
     }
     return [
-      { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody Queima 1)', color: 'purple' },
+      { day: 'Segunda', workoutId: wA, label: `Treino A • Fullbody 1 ${mTag}`, color: 'purple' },
       { day: 'Terça', workoutId: '', label: 'Descanso Ativo', color: 'muted' },
-      { day: 'Quarta', workoutId: 'w2', label: 'Treino B (Inferiores & Firmeza)', color: 'green' },
+      { day: 'Quarta', workoutId: wB, label: `Treino B • Inferiores ${mTag}`, color: 'green' },
       { day: 'Quinta', workoutId: '', label: 'Descanso Ativo', color: 'muted' },
-      { day: 'Sexta', workoutId: 'w3', label: 'Treino C (Fullbody Queima 2)', color: 'pink' },
+      { day: 'Sexta', workoutId: wC, label: `Treino C • Fullbody 2 ${mTag}`, color: 'pink' },
       { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
       { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
     ];
@@ -413,21 +461,21 @@ export function suggestedSchedule(frequency = 4, goal = 'Emagrecer') {
   if (frequency === 5) {
     if (isMassa) {
       return [
-        { day: 'Segunda', workoutId: 'w2', label: 'Inferiores (Foco Quadríceps)', color: 'green' },
-        { day: 'Terça', workoutId: 'w4', label: 'Superiores (Costas & Ombros)', color: 'blue' },
-        { day: 'Quarta', workoutId: 'w1', label: 'Posteriores & Glúteos', color: 'purple' },
+        { day: 'Segunda', workoutId: wB, label: `Inferiores (Quadríceps) ${mTag}`, color: 'green' },
+        { day: 'Terça', workoutId: wD, label: `Superiores & Costas ${mTag}`, color: 'blue' },
+        { day: 'Quarta', workoutId: wA, label: `Posteriores & Glúteos ${mTag}`, color: 'purple' },
         { day: 'Quinta', workoutId: 'b1', label: 'Mobilidade & Liberação', color: 'peach' },
-        { day: 'Sexta', workoutId: 'w3', label: 'Fullbody Hipertrofia Final', color: 'pink' },
+        { day: 'Sexta', workoutId: wC, label: `Fullbody Densidade ${mTag}`, color: 'pink' },
         { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
         { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
       ];
     }
     return [
-      { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody 1)', color: 'purple' },
-      { day: 'Terça', workoutId: 'w2', label: 'Treino B (Inferiores)', color: 'green' },
-      { day: 'Quarta', workoutId: 'w4', label: 'Treino D (Superiores)', color: 'blue' },
+      { day: 'Segunda', workoutId: wA, label: `Fullbody 1 ${mTag}`, color: 'purple' },
+      { day: 'Terça', workoutId: wB, label: `Inferiores & Glúteos ${mTag}`, color: 'green' },
+      { day: 'Quarta', workoutId: wD, label: `Superiores & Postura ${mTag}`, color: 'blue' },
       { day: 'Quinta', workoutId: 'b2', label: 'HIIT Express Queima', color: 'lime' },
-      { day: 'Sexta', workoutId: 'w3', label: 'Treino C (Fullbody 2)', color: 'pink' },
+      { day: 'Sexta', workoutId: wC, label: `Fullbody 2 ${mTag}`, color: 'pink' },
       { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
       { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
     ];
@@ -436,21 +484,21 @@ export function suggestedSchedule(frequency = 4, goal = 'Emagrecer') {
   if (frequency === 6) {
     if (isMassa) {
       return [
-        { day: 'Segunda', workoutId: 'w2', label: 'Inferiores A (Glúteos & Quadríceps)', color: 'green' },
-        { day: 'Terça', workoutId: 'w4', label: 'Superiores A (Puxadas & Ombros)', color: 'blue' },
-        { day: 'Quarta', workoutId: 'w1', label: 'Inferiores B (Posteriores & Panturrilha)', color: 'purple' },
-        { day: 'Quinta', workoutId: 'w3', label: 'Superiores B (Empurrar & Braços)', color: 'pink' },
-        { day: 'Sexta', workoutId: 'w2', label: 'Glúteos Isolados & Abdômen', color: 'green' },
+        { day: 'Segunda', workoutId: wB, label: `Inferiores A ${mTag}`, color: 'green' },
+        { day: 'Terça', workoutId: wD, label: `Superiores A ${mTag}`, color: 'blue' },
+        { day: 'Quarta', workoutId: wA, label: `Inferiores B ${mTag}`, color: 'purple' },
+        { day: 'Quinta', workoutId: wC, label: `Superiores B ${mTag}`, color: 'pink' },
+        { day: 'Sexta', workoutId: wB, label: `Glúteos Isolados ${mTag}`, color: 'green' },
         { day: 'Sábado', workoutId: 'b1', label: 'Mobilidade Articular', color: 'peach' },
         { day: 'Domingo', workoutId: '', label: 'Descanso Total', color: 'muted' }
       ];
     }
     return [
-      { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody 1)', color: 'purple' },
-      { day: 'Terça', workoutId: 'w2', label: 'Treino B (Inferiores)', color: 'green' },
-      { day: 'Quarta', workoutId: 'w4', label: 'Treino D (Superiores)', color: 'blue' },
+      { day: 'Segunda', workoutId: wA, label: `Fullbody 1 ${mTag}`, color: 'purple' },
+      { day: 'Terça', workoutId: wB, label: `Inferiores & Glúteos ${mTag}`, color: 'green' },
+      { day: 'Quarta', workoutId: wD, label: `Superiores ${mTag}`, color: 'blue' },
       { day: 'Quinta', workoutId: 'b2', label: 'HIIT Express', color: 'lime' },
-      { day: 'Sexta', workoutId: 'w3', label: 'Treino C (Fullbody 2)', color: 'pink' },
+      { day: 'Sexta', workoutId: wC, label: `Fullbody 2 ${mTag}`, color: 'pink' },
       { day: 'Sábado', workoutId: 'b1', label: 'Mobilidade', color: 'peach' },
       { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
     ];
@@ -459,21 +507,21 @@ export function suggestedSchedule(frequency = 4, goal = 'Emagrecer') {
   // Padrão 4x por semana (Exatamente como Screenshot 5 do ProFit)
   if (isMassa) {
     return [
-      { day: 'Segunda', workoutId: 'w2', label: 'Inferiores (Ênfase Glúteos)', color: 'green' },
-      { day: 'Terça', workoutId: 'w4', label: 'Superiores & Braços (Hipertrofia)', color: 'blue' },
+      { day: 'Segunda', workoutId: wB, label: `Inferiores • Foco Glúteos ${mTag}`, color: 'green' },
+      { day: 'Terça', workoutId: wD, label: `Superiores & Braços ${mTag}`, color: 'blue' },
       { day: 'Quarta', workoutId: '', label: 'Descanso / Recuperação Muscular', color: 'muted' },
-      { day: 'Quinta', workoutId: 'w1', label: 'Inferiores (Posterior & Core)', color: 'purple' },
-      { day: 'Sexta', workoutId: 'w3', label: 'Superiores & Peitoral/Costas', color: 'pink' },
+      { day: 'Quinta', workoutId: wA, label: `Inferiores • Posterior & Core ${mTag}`, color: 'purple' },
+      { day: 'Sexta', workoutId: wC, label: `Superiores & Costas ${mTag}`, color: 'pink' },
       { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
       { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
     ];
   }
   return [
-    { day: 'Segunda', workoutId: 'w1', label: 'Treino A (Fullbody 1)', color: 'purple' },
-    { day: 'Terça', workoutId: 'w2', label: 'Treino B (Inferiores 1)', color: 'green' },
-    { day: 'Quarta', workoutId: '', label: 'Descanso', color: 'muted' },
-    { day: 'Quinta', workoutId: 'w4', label: 'Treino D (Superiores)', color: 'blue' },
-    { day: 'Sexta', workoutId: 'w3', label: 'Treino C (Fullbody 2)', color: 'pink' },
+    { day: 'Segunda', workoutId: wA, label: `Treino A • Fullbody 1 ${mTag}`, color: 'purple' },
+    { day: 'Terça', workoutId: wB, label: `Treino B • Inferiores ${mTag}`, color: 'green' },
+    { day: 'Quarta', workoutId: '', label: 'Descanso Ativo', color: 'muted' },
+    { day: 'Quinta', workoutId: wD, label: `Treino D • Superiores ${mTag}`, color: 'blue' },
+    { day: 'Sexta', workoutId: wC, label: `Treino C • Fullbody 2 ${mTag}`, color: 'pink' },
     { day: 'Sábado', workoutId: '', label: 'Descanso', color: 'muted' },
     { day: 'Domingo', workoutId: '', label: 'Descanso', color: 'muted' }
   ];

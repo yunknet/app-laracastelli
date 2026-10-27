@@ -243,28 +243,48 @@ function attachVideoTracker() {
   if (!state.videoPositions) state.videoPositions = {};
   const savedPos = state.videoPositions[activeWorkoutId];
   if (savedPos && savedPos > 5) {
-    vid.addEventListener('loadedmetadata', () => {
-      if (savedPos < vid.duration - 5) {
+    const restorePos = () => {
+      if (savedPos < (vid.duration || 9999) - 5) {
         vid.currentTime = savedPos;
         const mins = Math.floor(savedPos / 60);
         const secs = String(Math.floor(savedPos % 60)).padStart(2, '0');
         toast(`Retomando aula de onde parou (${mins}:${secs})`);
       }
-    }, { once: true });
+    };
+    if (vid.readyState >= 1) restorePos();
+    else vid.addEventListener('loadedmetadata', restorePos, { once: true });
   }
 
-  let saveTimer = null;
+  let lastPersistedSec = 0;
   vid.addEventListener('timeupdate', () => {
-    if (vid.currentTime > 5 && !vid.ended) {
+    const currentSec = Math.floor(vid.currentTime);
+    if (currentSec > 3 && !vid.ended) {
+      state.videoPositions[activeWorkoutId] = currentSec;
+      // Persiste periodicamente a cada 5 segundos de reprodução contínua (sem atrasar ou adiar)
+      if (Math.abs(currentSec - lastPersistedSec) >= 5) {
+        lastPersistedSec = currentSec;
+        save();
+      }
+    }
+  });
+
+  vid.addEventListener('pause', () => {
+    if (vid.currentTime > 3) {
       state.videoPositions[activeWorkoutId] = Math.floor(vid.currentTime);
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => save(), 2500);
+      save();
     }
   });
 
   vid.addEventListener('ended', () => {
     state.videoPositions[activeWorkoutId] = 0;
     save();
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (vid && vid.currentTime > 3 && !vid.ended) {
+      state.videoPositions[activeWorkoutId] = Math.floor(vid.currentTime);
+      save();
+    }
   });
 }
 
@@ -638,7 +658,14 @@ function trainingView() {
 function fichaView() {
   const goal = state.profile.goal || 'Emagrecer';
   const frequency = state.profile.frequency || 4;
-  const schedule = suggestedSchedule(frequency, goal);
+  const schedule = suggestedSchedule(frequency, goal, currentMonth, currentWeek);
+
+  const weekThemes = {
+    1: 'Adaptação neuromuscular e alinhamento postural',
+    2: 'Aumento de cadência e sustentação muscular',
+    3: 'Sobrecarga progressiva e densidade de esforço',
+    4: 'Consolidação de força e pico metabólico'
+  };
 
   return `
     <div style="margin-bottom: 24px;">
@@ -656,6 +683,11 @@ function fichaView() {
     </div>
 
     <div class="ficha-view">
+      <!-- Foco Semanal Dinâmico -->
+      <div style="font-size: 12px; color: var(--green); font-weight: 700; margin-bottom: 14px; background: rgba(36, 84, 67, 0.08); padding: 8px 14px; border-radius: var(--radius-sm); border-left: 3px solid var(--green);">
+        🎯 Foco da Semana 0${currentWeek}: ${weekThemes[currentWeek] || 'Consistência de Execução'}
+      </div>
+
       <!-- Filtros da Ficha (Screenshot 5) -->
       <div class="ficha-filters">
         <!-- Objetivo: Emagrecer vs Massa Magra -->
@@ -778,10 +810,10 @@ function workoutPlayerView() {
         <div class="video-wrapper">
           <video id="workout-video" controls playsinline preload="metadata" src="${workout.video}" poster="${workout.poster}"></video>
           
-          <!-- PIP Adaptação Iniciante/Avançado Interativo -->
-          <div class="video-pip" data-action="toggle-pip" title="Toque para alternar o modo adaptado" style="cursor: pointer;">
-            <img src="${pipMode === 'iniciante' ? '/assets/treino-poster-2.jpg' : '/assets/treino-poster-4.jpg'}" alt="Adaptação">
-            <span>${pipMode === 'iniciante' ? 'Iniciante' : 'Avançado'} 🔄</span>
+          <!-- PIP Adaptação Iniciante/Avançado Interativo com Vídeo de Demonstração -->
+          <div class="video-pip" data-action="toggle-pip" title="Toque para alternar a demonstração no canto" style="cursor: pointer;">
+            <video id="pip-video" playsinline muted loop autoplay src="${pipMode === 'iniciante' ? (workout.pipVideo || '/assets/treino-video-2.mp4') : workout.video}" poster="${pipMode === 'iniciante' ? '/assets/treino-poster-2.jpg' : workout.poster}"></video>
+            <span id="pip-badge">${pipMode === 'iniciante' ? 'Iniciante (Adaptado)' : 'Avançado'} 🔄</span>
           </div>
 
           <!-- Overlay do Cronômetro Interativo -->
@@ -1515,11 +1547,26 @@ document.addEventListener('click', async event => {
         toast(`Visualizando programação da Semana 0${currentWeek}`);
         break;
 
-      case 'toggle-pip':
+      case 'toggle-pip': {
         pipMode = (pipMode === 'iniciante' ? 'avancado' : 'iniciante');
-        render();
+        const pipVideo = document.getElementById('pip-video');
+        const pipBadge = document.getElementById('pip-badge');
+        const workout = byId(activeWorkoutId) || workouts()[0];
+        if (pipVideo && workout) {
+          const newSrc = pipMode === 'iniciante' ? (workout.pipVideo || '/assets/treino-video-2.mp4') : workout.video;
+          const newPoster = pipMode === 'iniciante' ? '/assets/treino-poster-2.jpg' : workout.poster;
+          if (pipVideo.getAttribute('src') !== newSrc) {
+            pipVideo.src = newSrc;
+            pipVideo.poster = newPoster;
+            pipVideo.play().catch(() => {});
+          }
+        }
+        if (pipBadge) {
+          pipBadge.textContent = (pipMode === 'iniciante' ? 'Iniciante (Adaptado)' : 'Avançado') + ' 🔄';
+        }
         toast(pipMode === 'iniciante' ? 'Modo de visualização: Iniciante (Adaptado)' : 'Modo de visualização: Avançado');
         break;
+      }
 
       case 'copy-admin-msg': {
         const textarea = b.previousElementSibling;

@@ -45,6 +45,10 @@ before(async () => {
     stdio: 'pipe'
   });
 
+  let serverLogs = '';
+  server.stdout?.on('data', d => { serverLogs += d.toString(); });
+  server.stderr?.on('data', d => { serverLogs += d.toString(); });
+
   let ready = false;
   for (let i = 0; i < 60; i++) {
     try {
@@ -54,6 +58,9 @@ before(async () => {
       }
     } catch {}
     await new Promise(r => setTimeout(r, 100));
+  }
+  if (!ready) {
+    console.error('SERVER LOGS ON FAIL:\n', serverLogs);
   }
   assert.ok(ready, 'server ready');
 
@@ -414,5 +421,176 @@ test('webhook enforces authentication when secret is configured', async () => {
   } finally {
     authServer.kill();
     await new Promise(r => authServer.once('exit', r));
+  }
+});
+
+test('suggestedSchedule dynamically adapts workout IDs by month', async () => {
+  const { suggestedSchedule } = await import('../public/data.js');
+  const month1 = suggestedSchedule(4, 'Emagrecer', 1);
+  const month2 = suggestedSchedule(4, 'Emagrecer', 2);
+  const month3 = suggestedSchedule(4, 'Emagrecer', 3);
+
+  // Mês 1 deve conter w1, w2, w3, w4
+  const m1Ids = month1.map(d => d.workoutId).filter(Boolean);
+  assert.ok(m1Ids.includes('w1'), 'Mês 1 deve incluir w1');
+  assert.ok(!m1Ids.includes('w2_1'), 'Mês 1 não deve incluir w2_1');
+
+  // Mês 2 deve conter w2_1, w2_2, w2_3, w2_4
+  const m2Ids = month2.map(d => d.workoutId).filter(Boolean);
+  assert.ok(m2Ids.includes('w2_1'), 'Mês 2 deve incluir w2_1');
+  assert.ok(!m2Ids.includes('w1'), 'Mês 2 não deve incluir w1');
+
+  // Mês 3 deve conter w3_1, w3_2, w3_3, w3_4
+  const m3Ids = month3.map(d => d.workoutId).filter(Boolean);
+  assert.ok(m3Ids.includes('w3_1'), 'Mês 3 deve incluir w3_1');
+  assert.ok(!m3Ids.includes('w1'), 'Mês 3 não deve incluir w1');
+});
+
+test('webhook state machine blocks reactivation of refunded transaction', async () => {
+  const txId = 'tx-refund-replay-test';
+  const email = 'replay.victim@test.com';
+
+  // 1. Pagamento Pendente
+  const pendingRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Event: 'Payment_Pending',
+      Transaction: { Id: txId },
+      Buyer: { Name: 'Replay Victim', Email: email }
+    })
+  });
+  assert.equal(pendingRes.status, 200);
+  let user = await db.get('SELECT * FROM users WHERE email=?', email);
+  assert.ok(!user, 'Pending payment must not create user');
+
+  // 2. Pagamento Aprovado -> Cria conta e pedido approved
+  const approvedRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Event: 'Purchase_Order_Confirmed',
+      Transaction: { Id: txId },
+      Buyer: { Name: 'Replay Victim', Email: email }
+    })
+  });
+  assert.equal(approvedRes.status, 201);
+  user = await db.get('SELECT * FROM users WHERE email=?', email);
+  assert.ok(user, 'User should be created on approval');
+  assert.equal(user.active, 1);
+  let order = await db.get('SELECT * FROM orders WHERE id=?', txId);
+  assert.equal(order.status, 'approved');
+
+  // 3. Reembolso -> Suspende conta e marca pedido como refunded
+  const refundRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Event: 'Order_Refunded',
+      Transaction: { Id: txId },
+      Buyer: { Email: email }
+    })
+  });
+  assert.equal(refundRes.status, 200);
+  user = await db.get('SELECT * FROM users WHERE email=?', email);
+  assert.equal(user.active, 0, 'User should be suspended after refund');
+  order = await db.get('SELECT * FROM orders WHERE id=?', txId);
+  assert.equal(order.status, 'refunded');
+
+  // 4. Reenvio da aprovação antiga (ataque de replay) -> DEVE ser ignorado
+  const replayRes = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Event: 'Purchase_Order_Confirmed',
+      Transaction: { Id: txId },
+      Buyer: { Name: 'Replay Victim', Email: email }
+    })
+  });
+  assert.equal(replayRes.status, 200);
+  const replayData = await replayRes.json();
+  assert.equal(replayData.status, 'ignored_refunded');
+
+  // Conta DEVE permanecer suspensa (active: 0)
+  user = await db.get('SELECT * FROM users WHERE email=?', email);
+  assert.equal(user.active, 0, 'User MUST remain suspended after replayed approval');
+  order = await db.get('SELECT * FROM orders WHERE id=?', txId);
+  assert.equal(order.status, 'refunded');
+
+  // O histórico de webhook_events deve conter todos os eventos (sem colisão de chave primária)
+  const events = await db.all('SELECT event FROM webhook_events WHERE email=? ORDER BY created_at ASC', email);
+  assert.ok(events.length >= 4, 'All 4 webhook events must be recorded in webhook_events');
+});
+
+test('webhook strictly rejects Payment_Not_Approved without granting access', async () => {
+  const email = 'notapproved@test.com';
+  const res = await fetch(origin + '/api/webhook/lastlink', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Event: 'Payment_Not_Approved',
+      Transaction: { Id: 'tx-disapproved-1' },
+      Buyer: { Name: 'Not Approved', Email: email }
+    })
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.status, 'disapproved');
+
+  const user = await db.get('SELECT * FROM users WHERE email=?', email);
+  assert.ok(!user, 'User must not be created for Payment_Not_Approved');
+});
+
+test('webhook requires and validates LASTLINK_PRODUCT_ID when configured', async () => {
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+  const productServer = spawn(process.execPath, ['server/index.mjs'], {
+    cwd: repoRoot,
+    env: { ...process.env, PORT: '5197', APP_ORIGIN: 'http://localhost:5197', LASTLINK_PRODUCT_ID: 'prod_lara_123' },
+    stdio: 'ignore'
+  });
+
+  for (let i = 0; i < 40; i++) {
+    try {
+      const h = await fetch('http://localhost:5197/api/health');
+      if (h.status === 200) break;
+    } catch {}
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  try {
+    // 1. Payload sem produto informado -> 400
+    const noProductRes = await fetch('http://localhost:5197/api/webhook/lastlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Event: 'Purchase_Order_Confirmed', Buyer: { Email: 'prodtest1@test.com' } })
+    });
+    assert.equal(noProductRes.status, 400);
+
+    // 2. Payload com produto divergente -> 400
+    const wrongProductRes = await fetch('http://localhost:5197/api/webhook/lastlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        Event: 'Purchase_Order_Confirmed',
+        Product: { Id: 'prod_outro_curso' },
+        Buyer: { Email: 'prodtest2@test.com' }
+      })
+    });
+    assert.equal(wrongProductRes.status, 400);
+
+    // 3. Payload com produto correspondente -> 201
+    const matchingRes = await fetch('http://localhost:5197/api/webhook/lastlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        Event: 'Purchase_Order_Confirmed',
+        Product: { Id: 'prod_lara_123' },
+        Buyer: { Name: 'Aluna Produto Certo', Email: 'prodcerto@test.com' }
+      })
+    });
+    assert.equal(matchingRes.status, 201);
+  } finally {
+    productServer.kill();
+    await new Promise(r => productServer.once('exit', r));
   }
 });

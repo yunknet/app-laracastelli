@@ -59,11 +59,14 @@ const webhookHandler = async (req, res) => {
     const event = body.Event || body.event || body.type || 'purchase';
 
     // Verificação de Produto (se LASTLINK_PRODUCT_ID estiver configurado no ambiente)
+    // Se o segredo/ID do produto estiver configurado, o payload DEVE conter o produto correspondente
     const expectedProductId = process.env.LASTLINK_PRODUCT_ID || process.env.PRODUCT_ID;
-    const productId = body.Product?.Id || body.Product?.id || body.product?.id || body.productId || body.product_id || body.Data?.Product?.Id || body.data?.product?.id;
-    if (expectedProductId && productId && String(productId).trim() !== String(expectedProductId).trim()) {
-      console.log(`[Webhook] Evento ignorado: produto ${productId} não corresponde ao esperado ${expectedProductId}`);
-      return res.json({ ok: true, message: 'Evento ignorado: produto não correspondente ao app.', productId });
+    if (expectedProductId) {
+      const productId = body.Product?.Id || body.Product?.id || body.product?.id || body.productId || body.product_id || body.Data?.Product?.Id || body.data?.product?.id;
+      if (!productId || String(productId).trim() !== String(expectedProductId).trim()) {
+        console.log(`[Webhook] Evento rejeitado: identificação do produto ausente ou não correspondente (${productId || 'não informado'} !== ${expectedProductId})`);
+        return res.status(400).json({ error: 'Produto ausente ou não correspondente ao aplicativo.', productId: productId || null });
+      }
     }
 
     // Extração flexível de e-mail e nome (suporta Lastlink, Hotmart, Kiwify, Stripe, etc.)
@@ -133,45 +136,111 @@ const webhookHandler = async (req, res) => {
       ''
     ).trim();
 
+    // Normalização estrita do nome do evento
+    const cleanEvent = String(event || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+    // Sempre grava o evento recebido no histórico de auditoria (com UUID próprio para evitar conflito de chave primária)
+    try {
+      await db.run(
+        'INSERT INTO webhook_events(id, transaction_id, event, email, payload) VALUES(?,?,?,?,?)',
+        randomUUID(),
+        transactionId || null,
+        event,
+        email,
+        JSON.stringify(body)
+      );
+    } catch (evtErr) {
+      console.warn('[Webhook] Aviso ao registrar histórico do evento:', evtErr.message);
+    }
+
+    // Consulta estado atual da transação/pedido (se houver transactionId)
+    let currentOrder = null;
+    if (transactionId) {
+      currentOrder = await db.get('SELECT * FROM orders WHERE id=?', transactionId);
+    }
+
     // Tratamento de cancelamento / reembolso / estorno / fim de acesso
-    const isRevoke = /refund|chargeback|cancel|expir|reembols|estorn|fim.*libera|remo.*acesso|ended|revok/i.test(event);
+    const isRevoke = /refund|chargeback|cancel|expir|reembols|estorn|fim.*libera|remo.*acesso|ended|revok/i.test(cleanEvent);
     if (isRevoke) {
+      if (transactionId) {
+        if (currentOrder) {
+          await db.run("UPDATE orders SET status='refunded', updated_at=CURRENT_TIMESTAMP WHERE id=?", transactionId);
+        } else {
+          await db.run("INSERT INTO orders(id, user_id, email, status) VALUES(?, NULL, ?, 'refunded')", transactionId, email);
+        }
+      }
       const existing = await db.get('SELECT id FROM users WHERE email=?', email);
       if (existing) {
-        await db.run('UPDATE users SET active=0 WHERE id=?', existing.id);
-        await db.run('DELETE FROM sessions WHERE user_id=?', existing.id);
-        console.log(`[Webhook Lastlink] Acesso revogado/reembolsado: ${email} (evento: ${event})`);
+        // Verifica se a aluna possui OUTRO pedido aprovado e ativo
+        const otherApproved = transactionId
+          ? await db.get("SELECT id FROM orders WHERE email=? AND id != ? AND status='approved'", email, transactionId)
+          : null;
+        if (!otherApproved) {
+          await db.run('UPDATE users SET active=0 WHERE id=?', existing.id);
+          await db.run('DELETE FROM sessions WHERE user_id=?', existing.id);
+          console.log(`[Webhook Lastlink] Acesso revogado/reembolsado: ${email} (evento: ${event}, transação: ${transactionId})`);
+        }
       }
-      const recordId = transactionId || randomUUID();
-      try {
-        await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
-      } catch {}
-      return res.json({ ok: true, message: 'Acesso revogado com sucesso.', email, event });
+      return res.json({ ok: true, message: 'Acesso revogado com sucesso.', email, event, transactionId });
+    }
+
+    // Eventos de recusa / pagamento não aprovado (NÃO devem liberar acesso sob nenhuma hipótese)
+    const isDisapproved = /not[_-]?approved|unapproved|failed|denied|reprovad|recusad|nao[_-]?aprovad|negad/i.test(cleanEvent);
+    if (isDisapproved) {
+      console.log(`[Webhook] Pagamento não aprovado / recusado para ${email} (evento: ${event}).`);
+      if (transactionId && !currentOrder) {
+        await db.run("INSERT INTO orders(id, user_id, email, status) VALUES(?, NULL, ?, 'disapproved')", transactionId, email);
+      }
+      return res.json({ ok: true, status: 'disapproved', message: 'Pagamento não aprovado ou recusado pela operadora.', event });
     }
 
     // Eventos de pagamento pendente (NÃO devem liberar acesso prematuro)
-    const isPending = /pending|aguardando|waiting|abandon|boleto|pix_created|fatura.*criada|tentativa/i.test(event);
+    const isPending = /pending|aguardando|waiting|abandon|boleto|pix_created|fatura.*criada|tentativa/i.test(cleanEvent);
     if (isPending) {
       console.log(`[Webhook] Pagamento pendente registrado para ${email} (evento: ${event}). Acesso não liberado.`);
-      const recordId = transactionId || randomUUID();
-      try {
-        await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
-      } catch {}
-      return res.json({ ok: true, status: 'pending', message: 'Pagamento pendente. O acesso será liberado após a confirmação da transação.' });
+      if (transactionId && !currentOrder) {
+        await db.run("INSERT INTO orders(id, user_id, email, status) VALUES(?, NULL, ?, 'pending')", transactionId, email);
+      }
+      return res.json({ ok: true, status: 'pending', message: 'Pagamento pendente. O acesso será liberado após a confirmação da transação.', transactionId });
     }
 
-    // Eventos explicitamente aprovados
-    const isApproved = /purchase_order_confirmed|order_approved|payment_approved|compra[ _]completa|recurrent_payment|pagamento.*efetuado|product_access_started|in[ií]cio.*libera[çc][aã]o|approved|complete|paid|checkout\.session\.completed|invoice\.paid|payment_intent\.succeeded|^purchase$/i.test(event);
+    // Validação estrita de eventos aprovados (whitelist exata, sem match parcial perigoso)
+    const EXACT_APPROVED_EVENTS = new Set([
+      'purchase_order_confirmed',
+      'order_approved',
+      'payment_approved',
+      'compra_completa',
+      'recurrent_payment',
+      'pagamento_de_renovacao_efetuado',
+      'pagamento_efetuado',
+      'product_access_started',
+      'inicio_liberacao_de_acesso',
+      'checkout.session.completed',
+      'invoice.paid',
+      'payment_intent.succeeded',
+      'purchase',
+      'paid',
+      'approved'
+    ]);
+    const isApproved = EXACT_APPROVED_EVENTS.has(cleanEvent) ||
+      EXACT_APPROVED_EVENTS.has(String(event).trim().toLowerCase()) ||
+      /^(purchase_order_confirmed|order_approved|payment_approved|compra_completa|recurrent_payment|product_access_started|inicio_liberacao_de_acesso)$/i.test(cleanEvent);
+
     if (!isApproved) {
-      console.log(`[Webhook] Evento não qualificado para liberação automática de acesso: ${event} (${email})`);
+      console.log(`[Webhook] Evento não qualificado para liberação de acesso: ${event} (${email})`);
       return res.json({ ok: true, status: 'unhandled', message: 'Evento recebido, mas não elegível para liberação automática de acesso.', event });
     }
 
-    // Controle de eventos repetidos / idempotência
-    if (transactionId) {
-      const alreadyProcessed = await db.get('SELECT id FROM webhook_events WHERE id=? AND event=?', transactionId, event);
-      if (alreadyProcessed) {
-        return res.json({ ok: true, message: 'Evento já processado anteriormente.', transactionId, event });
+    // CONTROLE DE TRANSAÇÕES FORA DE ORDEM E IDEMPOTÊNCIA
+    if (transactionId && currentOrder) {
+      // Se a transação já foi reembolsada ou cancelada, um reenvio de aprovação antiga DEVE ser ignorado!
+      if (currentOrder.status === 'refunded' || currentOrder.status === 'canceled') {
+        console.log(`[Webhook] Reativação bloqueada: a transação ${transactionId} já se encontra reembolsada/cancelada.`);
+        return res.json({ ok: true, status: 'ignored_refunded', message: 'Aprovação ignorada: transação cancelada ou reembolsada anteriormente.', transactionId });
+      }
+      // Se já foi aprovada anteriormente, retorna idempotência sem reprocessamento
+      if (currentOrder.status === 'approved') {
+        return res.json({ ok: true, status: 'already_approved', message: 'Transação já aprovada anteriormente (já processado).', transactionId });
       }
     }
 
@@ -186,11 +255,16 @@ const webhookHandler = async (req, res) => {
         await db.run('UPDATE users SET active=1 WHERE id=?', existing.id);
         console.log(`[Webhook] Aluna reativada com sucesso: ${email}`);
       }
-      const recordId = transactionId || randomUUID();
-      try {
-        await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
-      } catch {}
-      return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: existing.id });
+      if (transactionId) {
+        try {
+          if (currentOrder) {
+            await db.run("UPDATE orders SET status='approved', user_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", existing.id, transactionId);
+          } else {
+            await db.run("INSERT INTO orders(id, user_id, email, status) VALUES(?,?,?,'approved')", transactionId, existing.id, email);
+          }
+        } catch {}
+      }
+      return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: existing.id, transactionId });
     }
 
     const userId = randomUUID();
@@ -211,19 +285,22 @@ const webhookHandler = async (req, res) => {
         userId,
         JSON.stringify({ profile: { name, goal: 'Emagrecer', frequency: 4, level: 'Iniciante' } })
       );
+
+      if (transactionId) {
+        if (currentOrder) {
+          await db.run("UPDATE orders SET status='approved', user_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", userId, transactionId);
+        } else {
+          await db.run("INSERT INTO orders(id, user_id, email, status) VALUES(?,?,?,'approved')", transactionId, userId, email);
+        }
+      }
     } catch (insertErr) {
       const fallback = await db.get('SELECT id FROM users WHERE email=?', email);
       if (fallback) {
         await db.run('UPDATE users SET active=1 WHERE id=?', fallback.id);
-        return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: fallback.id });
+        return res.json({ ok: true, message: 'Usuária já existente. Acesso mantido ativo.', userId: fallback.id, transactionId });
       }
       throw insertErr;
     }
-
-    const recordId = transactionId || randomUUID();
-    try {
-      await db.run('INSERT INTO webhook_events(id, event, email, payload) VALUES(?,?,?,?)', recordId, event, email, JSON.stringify(body));
-    } catch {}
 
     console.log(`[Webhook] Nova aluna cadastrada com sucesso: ${email} (${name}) com senha padrão`);
     res.status(201).json({
@@ -231,7 +308,8 @@ const webhookHandler = async (req, res) => {
       message: 'Aluna criada com sucesso.',
       userId,
       email,
-      temporaryPassword: passwordToUse
+      temporaryPassword: passwordToUse,
+      transactionId
     });
   } catch (err) {
     console.error('[Webhook Error]:', err);
