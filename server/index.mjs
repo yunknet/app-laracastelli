@@ -338,7 +338,7 @@ app.use('/api', async (req, res, next) => {
     const token = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('lara_session='))?.slice(13);
     if (token) {
       req.user = await db.get(
-        'SELECT u.id, u.name, u.email, u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1',
+        'SELECT u.id, u.name, u.email, u.role, u.created_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1',
         digest(token),
         Date.now()
       );
@@ -427,7 +427,7 @@ app.post('/api/login', rateLimit({ windowMs: 15 * 60_000, limit: 15 }), async (r
       sameSite: 'lax',
       maxAge: 7 * 86400000,
       path: '/'
-    }).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    }).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, created_at: user.created_at } });
   } catch (err) {
     next(err);
   }
@@ -465,13 +465,80 @@ app.put('/api/state', auth, async (req, res, next) => {
   try {
     const data = req.body;
     if (!data || Array.isArray(data) || typeof data !== 'object') return fail(res, 'Dados inválidos.');
-    const allowed = ['profile', 'completed', 'water', 'checkins', 'favorites', 'shopping', 'read', 'schedule', 'exerciseChecks', 'videoPositions', 'meals', 'applications', 'symptoms', 'supplements'];
+    const allowed = ['profile', 'completed', 'water', 'checkins', 'favorites', 'shopping', 'read', 'schedule', 'exerciseChecks', 'videoPositions', 'meals', 'applications', 'symptoms', 'supplements', 'chosenBonus'];
     if (Object.keys(data).some(k => !allowed.includes(k))) return fail(res, 'Campo não permitido.');
     const arrayFields = ['completed', 'checkins', 'favorites', 'shopping', 'read', 'meals', 'applications', 'symptoms', 'supplements'];
     if (arrayFields.some(k => data[k] !== undefined && !Array.isArray(data[k]))) return fail(res, 'Lista inválida.');
-    if (['profile', 'water', 'schedule', 'exerciseChecks', 'videoPositions'].some(k => data[k] !== undefined && (!data[k] || Array.isArray(data[k]) || typeof data[k] !== 'object'))) return fail(res, 'Registro inválido.');
+    if (['profile', 'water', 'schedule', 'exerciseChecks', 'videoPositions', 'chosenBonus'].some(k => data[k] !== undefined && (!data[k] || Array.isArray(data[k]) || typeof data[k] !== 'object'))) return fail(res, 'Registro inválido.');
+    
+    // Se a aluna já tiver um bônus escolhido gravado, impede a alteração arbitrária via put
+    const existingRow = await db.get('SELECT body FROM member_state WHERE user_id=?', req.user.id);
+    const existingState = JSON.parse(existingRow?.body || '{}');
+    if (existingState.chosenBonus && existingState.chosenBonus.id) {
+      data.chosenBonus = existingState.chosenBonus;
+    }
+
     await db.run('INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET body=EXCLUDED.body', req.user.id, JSON.stringify(data));
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Endpoint seguro para escolha única do bônus de 7 dias
+app.post('/api/bonus/choose', auth, async (req, res, next) => {
+  try {
+    const bonusId = text(req.body?.bonusId, 50);
+    const validBonuses = {
+      'cintura-vacuo': 'Protocolo Cintura Fina & Vácuo Abdominal (LPF)',
+      'anti-flacidez': 'Manual SOS Anti-Flacidez: Resgate de Firmeza Muscular',
+      'gluteos-3d': 'Acelerador de Glúteos 3D: Bumbum Firme em 10 Minutos',
+      'fim-de-semana': 'Manual Fim de Semana Sem Culpa: Comer Fora sem Engordar',
+      'queima-acelerada': 'Desafio Queima Acelerada: Destrave Metabólico de 7 Dias'
+    };
+    if (!bonusId || !validBonuses[bonusId]) {
+      return fail(res, 'Bônus inválido ou não encontrado.');
+    }
+
+    const row = await db.get('SELECT body FROM member_state WHERE user_id=?', req.user.id);
+    const state = JSON.parse(row?.body || '{}');
+
+    // Regra: Escolha única e permanente
+    if (state.chosenBonus && state.chosenBonus.id) {
+      return res.status(400).json({
+        error: `Você já escolheu o seu bônus de 7 dias (${state.chosenBonus.title}). A escolha é única e definitiva.`,
+        chosenBonus: state.chosenBonus
+      });
+    }
+
+    // Regra de carência: 7 dias desde o cadastro/compra
+    const userRow = await db.get('SELECT created_at FROM users WHERE id=?', req.user.id);
+    const createdAt = userRow?.created_at ? new Date(userRow.created_at).getTime() : Date.now();
+    const daysPassed = (Date.now() - createdAt) / (1000 * 60 * 60 * 24);
+
+    if (daysPassed < 7 && req.user.role !== 'admin') {
+      const daysRemaining = Math.max(1, Math.ceil(7 - daysPassed));
+      return res.status(403).json({
+        error: `Seu bônus especial estará liberado para escolha em ${daysRemaining} dia(s).`,
+        daysRemaining
+      });
+    }
+
+    const chosenBonus = {
+      id: bonusId,
+      title: validBonuses[bonusId],
+      chosen_at: new Date().toISOString()
+    };
+    state.chosenBonus = chosenBonus;
+
+    await db.run(
+      'INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET body=EXCLUDED.body',
+      req.user.id,
+      JSON.stringify(state)
+    );
+
+    console.log(`[Bônus 7 Dias] Aluna ${req.user.email} escolheu: ${chosenBonus.title}`);
+    res.json({ ok: true, chosenBonus });
   } catch (err) {
     next(err);
   }
@@ -629,7 +696,29 @@ app.put('/api/tickets/:id', auth, admin, async (req, res, next) => {
 
 app.get('/api/admin/users', auth, admin, async (req, res, next) => {
   try {
-    res.json(await db.all('SELECT id, name, email, role, active FROM users ORDER BY created_at DESC'));
+    const rows = await db.all(`
+      SELECT u.id, u.name, u.email, u.role, u.active, u.created_at, m.body AS state_body
+      FROM users u
+      LEFT JOIN member_state m ON m.user_id = u.id
+      ORDER BY u.created_at DESC
+    `);
+    const users = rows.map(u => {
+      let chosenBonus = null;
+      try {
+        const parsed = JSON.parse(u.state_body || '{}');
+        chosenBonus = parsed.chosenBonus || null;
+      } catch {}
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        active: u.active,
+        created_at: u.created_at,
+        chosenBonus
+      };
+    });
+    res.json(users);
   } catch (err) {
     next(err);
   }

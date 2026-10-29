@@ -1,5 +1,6 @@
 import { demoContent, blankState, dateKey, weekDays, suggestedSchedule } from './data.js';
 import { programView, validateProgramSettings } from './program-view.js';
+import { BONUS_CATALOG } from './bonus-data.js';
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -29,7 +30,10 @@ const paths = {
   camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   progress: 'm4 17 5-5 4 3 7-10M4 4v16h17',
   eye: 'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
-  'eye-off': 'M9.88 9.88a3 3 0 1 0 4.24 4.24M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M2 2l20 20'
+  'eye-off': 'M9.88 9.88a3 3 0 1 0 4.24 4.24M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M2 2l20 20',
+  gift: 'M20 12v10H4V12M2 7h20v5H2zm10 0V2M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zm0 0h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
+  lock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zm-12 0V7a5 5 0 0 1 10 0v4',
+  star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'
 };
 
 const icon = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.book}"/></svg>`;
@@ -39,6 +43,7 @@ const navs = [
   ['home', 'Início', 'home'],
   ['training', 'Treinos', 'training'],
   ['ficha', 'Ficha', 'ficha'],
+  ['bonus', 'Bônus 7 Dias', 'gift'],
   ['food', 'Alimentação', 'food'],
   ['community', 'Comunidade', 'community'],
   ['profile', 'Perfil', 'profile']
@@ -52,6 +57,8 @@ let posts = [];
 let tickets = [];
 let photos = [];
 let pipMode = 'iniciante'; // 'iniciante' ou 'avancado'
+let activeBonusTab = null;
+let bonusTimerInterval = null;
 let page = 'home';
 let activeWorkoutId = null;
 let activeLessonTab = 'pratica'; // 'instrucoes' ou 'pratica'
@@ -251,6 +258,7 @@ function render() {
   if (page === 'admin') refreshAdmin();
   if (page === 'workout') attachVideoTracker();
   if (page === 'programa' && programConfig.enabled && !programLoaded && !programLoading && !programError) programLoading = loadProgramCatalogue();
+  startBonusTimer();
 }
 
 function attachVideoTracker() {
@@ -310,6 +318,7 @@ function pageTitle() {
     case 'home': return 'Início';
     case 'programa': return 'Programa 12 semanas';
     case 'training': return 'Seus Treinos';
+    case 'bonus': return 'Bônus de 7 Dias';
     case 'ficha': return 'Ficha Interativa';
     case 'workout': return 'Player de Treino';
     case 'food': return 'Alimentação';
@@ -388,6 +397,7 @@ function pageContent() {
     case 'home': return homeView();
     case 'programa': return programView({ state, config: programConfig, catalogue: programCatalogue, loaded: programLoaded, error: programError });
     case 'training': return trainingView();
+    case 'bonus': return bonusView();
     case 'ficha': return fichaView();
     case 'workout': return workoutPlayerView();
     case 'food': return foodView();
@@ -400,6 +410,401 @@ function pageContent() {
     case 'search': return searchView();
     default: return homeView();
   }
+}
+
+/* ========================================================
+   SISTEMA DE BÔNUS EXCLUSIVOS DE 7 DIAS (D+7)
+   ======================================================== */
+function getBonusStatus() {
+  const createdAtStr = user?.created_at || (demo ? (sessionStorage.getItem('lara-demo-created') || today()) : null);
+  const createdAt = createdAtStr ? new Date(createdAtStr).getTime() : Date.now();
+  const unlockTime = createdAt + 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const remainingMs = Math.max(0, unlockTime - now);
+  // Aluna elegível no 7º dia; administradores têm prévia irrestrita para testes
+  const isUnlocked = remainingMs <= 0 || user?.role === 'admin' || (demo && sessionStorage.getItem('lara-demo-unlocked') === '1');
+  const chosenBonus = state.chosenBonus || (demo ? JSON.parse(sessionStorage.getItem('lara-demo-chosen-bonus') || 'null') : null);
+
+  const days = Math.floor(remainingMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((remainingMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+  const secs = Math.floor((remainingMs % (1000 * 60)) / 1000);
+
+  return {
+    createdAt,
+    unlockTime,
+    remainingMs,
+    isUnlocked,
+    chosenBonus,
+    days,
+    hours,
+    mins,
+    secs
+  };
+}
+
+function startBonusTimer() {
+  if (bonusTimerInterval) clearInterval(bonusTimerInterval);
+  bonusTimerInterval = setInterval(() => {
+    const timerEls = document.querySelectorAll('.bonus-timer-countdown');
+    if (!timerEls.length) return;
+    const status = getBonusStatus();
+    if (status.isUnlocked && !status.chosenBonus) {
+      clearInterval(bonusTimerInterval);
+      render();
+      return;
+    }
+    timerEls.forEach(el => {
+      const d = el.querySelector('.td-days');
+      const h = el.querySelector('.td-hours');
+      const m = el.querySelector('.td-mins');
+      const s = el.querySelector('.td-secs');
+      if (d) d.textContent = String(status.days).padStart(2, '0');
+      if (h) h.textContent = String(status.hours).padStart(2, '0');
+      if (m) m.textContent = String(status.mins).padStart(2, '0');
+      if (s) s.textContent = String(status.secs).padStart(2, '0');
+    });
+  }, 1000);
+}
+
+function bonusCountdownBanner() {
+  const status = getBonusStatus();
+
+  // Caso 1: Usuária já escolheu seu bônus
+  if (status.chosenBonus) {
+    const bonus = BONUS_CATALOG[status.chosenBonus.id] || { title: status.chosenBonus.title, emoji: '🎁' };
+    return `
+      <div class="bonus-countdown-banner chosen">
+        <div class="bonus-banner-left">
+          <div class="bonus-banner-icon" style="background: rgba(203, 230, 120, 0.2); border-color: var(--lime);">${bonus.emoji || '⭐'}</div>
+          <div>
+            <span class="bonus-banner-tag">✦ SEU BÔNUS PREMIUM ATIVO</span>
+            <h3 class="bonus-banner-title">${esc(status.chosenBonus.title)}</h3>
+            <p class="bonus-banner-sub">Conteúdo liberado de forma definitiva para o seu perfil.</p>
+          </div>
+        </div>
+        <div>
+          <button class="btn lime" data-action="open-chosen-bonus" data-id="${esc(status.chosenBonus.id)}" style="font-size: 13px; padding: 10px 20px;">
+            Acessar Meu Bônus ▶
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // Caso 2: 7 dias se passaram -> Liberado para escolher 1 dos 5
+  if (status.isUnlocked) {
+    return `
+      <div class="bonus-countdown-banner unlocked">
+        <div class="bonus-banner-left">
+          <div class="bonus-banner-icon">🎉</div>
+          <div>
+            <span class="bonus-banner-tag">✦ DESBLOQUEADO • ESCOLHA DISPONÍVEL</span>
+            <h3 class="bonus-banner-title">Seu Bônus de 7 Dias foi Liberado!</h3>
+            <p class="bonus-banner-sub">Você completou 1 semana! Escolha 1 dos 5 super bônus para liberar agora.</p>
+          </div>
+        </div>
+        <div>
+          <a href="#bonus" class="btn lime" style="font-size: 13px; padding: 10px 22px;">
+            Escolher Meu Bônus ✦
+          </a>
+        </div>
+      </div>
+    `;
+  }
+
+  // Caso 3: Menos de 7 dias -> Contagem regressiva ativa
+  return `
+    <div class="bonus-countdown-banner">
+      <div class="bonus-banner-left">
+        <div class="bonus-banner-icon">🎁</div>
+        <div>
+          <span class="bonus-banner-tag">✦ BÔNUS ESPECIAL DE BOAS-VINDAS (7 DIAS)</span>
+          <h3 class="bonus-banner-title">Escolha 1 entre 5 Bônus Exclusivos</h3>
+          <p class="bonus-banner-sub">Após sua 1ª semana de adaptação, você poderá escolher 1 conteúdo premium definitivo.</p>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+        <div class="bonus-countdown-digits bonus-timer-countdown">
+          <div class="cd-box"><span class="cd-val td-days">${String(status.days).padStart(2, '0')}</span><span class="cd-lbl">Dias</span></div>
+          <span class="cd-sep">:</span>
+          <div class="cd-box"><span class="cd-val td-hours">${String(status.hours).padStart(2, '0')}</span><span class="cd-lbl">Horas</span></div>
+          <span class="cd-sep">:</span>
+          <div class="cd-box"><span class="cd-val td-mins">${String(status.mins).padStart(2, '0')}</span><span class="cd-lbl">Min</span></div>
+          <span class="cd-sep">:</span>
+          <div class="cd-box"><span class="cd-val td-secs">${String(status.secs).padStart(2, '0')}</span><span class="cd-lbl">Seg</span></div>
+        </div>
+        <a href="#bonus" class="btn light" style="font-size: 12px; padding: 8px 16px;">
+          Conhecer os 5 Bônus ↗
+        </a>
+      </div>
+    </div>
+  `;
+}
+
+function bonusView() {
+  const status = getBonusStatus();
+  const bonuses = Object.values(BONUS_CATALOG);
+
+  // Se a aluna estiver com a aba de conteúdo ativa de um bônus escolhido (ou admin)
+  if (activeBonusTab && (status.chosenBonus?.id === activeBonusTab || status.isUnlocked)) {
+    return bonusContentView(activeBonusTab);
+  }
+
+  return `
+    <div style="margin-bottom: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;">
+        <span class="tag green" style="font-size: 10px; font-weight: 800; letter-spacing: 0.8px;">🎁 BÔNUS EXCLUSIVO DE 7 DIAS</span>
+        ${user?.role === 'admin' ? `
+          <span class="tag lime" style="font-size: 10px;">Modo Administrador (Acesso Irrestrito)</span>
+        ` : ''}
+      </div>
+      <h1 style="font-size: 26px; font-weight: 800; color: var(--ink); margin-bottom: 6px;">Seus Bônus Especiais de Boas-Vindas</h1>
+      <p style="font-size: 14px; color: var(--muted); max-width: 780px; line-height: 1.6;">
+        Como aluna do Método Lara Castelli, após os seus primeiros 7 dias de treino você tem direito a escolher <strong>1 único bônus definitivo</strong> para desbloquear de forma vitalícia.
+      </p>
+    </div>
+
+    <!-- Banner de Status / Contagem -->
+    ${bonusCountdownBanner()}
+
+    ${status.chosenBonus ? `
+      <div class="card" style="padding: 16px 20px; margin-bottom: 28px; background: #f0f7f3; border: 1.5px solid #c2e2d0; border-radius: var(--radius-md); display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+        <span style="font-size: 24px;">✓</span>
+        <div style="flex: 1;">
+          <strong style="color: var(--green); font-size: 14px;">Você já selecionou o seu bônus de 7 dias:</strong>
+          <span style="display: block; font-size: 13px; color: var(--ink); margin-top: 2px;">${esc(status.chosenBonus.title)}</span>
+        </div>
+        <button class="btn" data-action="open-chosen-bonus" data-id="${esc(status.chosenBonus.id)}" style="font-size: 12px; padding: 8px 18px;">
+          Abrir Conteúdo ▶
+        </button>
+      </div>
+    ` : status.isUnlocked ? `
+      <div class="card" style="padding: 16px 20px; margin-bottom: 28px; background: #fffdf5; border: 1.5px solid #f2e3b3; border-radius: var(--radius-md); display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+        <span style="font-size: 24px;">💡</span>
+        <div style="flex: 1;">
+          <strong style="color: #8c6812; font-size: 14px;">Atenção à sua escolha:</strong>
+          <span style="display: block; font-size: 13px; color: var(--muted); margin-top: 2px;">
+            Você pode escolher <strong>somente 1 produto</strong> abaixo. Assim que você confirmar sua escolha, o conteúdo será liberado imediatamente e as outras opções não poderão ser selecionadas.
+          </span>
+        </div>
+      </div>
+    ` : `
+      <div class="card" style="padding: 16px 20px; margin-bottom: 28px; background: var(--paper); border: 1.5px solid var(--line); border-radius: var(--radius-md); display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+        <span style="font-size: 24px;">🔒</span>
+        <div style="flex: 1;">
+          <strong style="color: var(--ink); font-size: 14px;">Conteúdos em contagem regressiva:</strong>
+          <span style="display: block; font-size: 13px; color: var(--muted); margin-top: 2px;">
+            Conheça todos os detalhes de cada bônus abaixo. No 7º dia exato após sua compra, o botão de seleção será ativado para você garantir seu bônus preferido.
+          </span>
+        </div>
+      </div>
+    `}
+
+    <!-- Vitrine dos 5 Bônus -->
+    <div class="bonus-grid">
+      ${bonuses.map(b => {
+        const isChosen = status.chosenBonus?.id === b.id;
+        const hasOtherChosen = status.chosenBonus && !isChosen;
+
+        return `
+          <div class="bonus-card ${isChosen ? 'chosen' : ''} ${hasOtherChosen ? 'disabled' : ''}">
+            <div class="bonus-card-media">
+              <img src="${b.poster}" alt="${esc(b.title)}">
+              <span class="bonus-card-badge ${b.badgeColor}">${b.badge}</span>
+            </div>
+
+            <div class="bonus-card-body">
+              <div class="bonus-card-header">
+                <span class="bonus-card-category">${b.emoji} ${esc(b.category)} • ${esc(b.duration)}</span>
+                <h3 class="bonus-card-title">${esc(b.title)}</h3>
+                <p class="bonus-card-tagline">${esc(b.tagline)}</p>
+              </div>
+
+              <ul class="bonus-card-highlights">
+                ${b.highlights.map(h => `<li>${esc(h)}</li>`).join('')}
+              </ul>
+
+              <div class="bonus-card-footer">
+                ${isChosen ? `
+                  <div class="bonus-chosen-badge">✓ SEU BÔNUS ATIVO</div>
+                  <button class="btn" data-action="open-chosen-bonus" data-id="${b.id}" style="width: 100%; font-size: 13px;">
+                    Acessar Conteúdo Completo ▶
+                  </button>
+                ` : hasOtherChosen ? `
+                  <button class="btn light" disabled style="width: 100%; font-size: 12px; opacity: 0.6; cursor: not-allowed;">
+                    Outra opção (Você escolheu ${esc(status.chosenBonus.title.split(':')[0])})
+                  </button>
+                ` : status.isUnlocked ? `
+                  <button class="btn lime" data-action="choose-bonus" data-id="${b.id}" style="width: 100%; font-size: 13px; font-weight: 800;">
+                    ⭐ Escolher Este Bônus
+                  </button>
+                  <button class="btn light" data-action="preview-bonus" data-id="${b.id}" style="width: 100%; font-size: 12px;">
+                    Ver Detalhes do Conteúdo
+                  </button>
+                ` : `
+                  <button class="btn light" data-action="preview-bonus" data-id="${b.id}" style="width: 100%; font-size: 12px;">
+                    Ver Detalhes do Conteúdo ↗
+                  </button>
+                  <span style="font-size: 11px; color: var(--muted); text-align: center; display: block;">
+                    🔒 Libera em ${status.days}d ${status.hours}h
+                  </span>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function bonusContentView(bonusId) {
+  const bonus = BONUS_CATALOG[bonusId];
+  if (!bonus) {
+    activeBonusTab = null;
+    return bonusView();
+  }
+
+  return `
+    <div style="margin-bottom: 20px;">
+      <button class="btn light small" data-action="back-to-bonuses" style="margin-bottom: 14px;">
+        ← Voltar aos Bônus
+      </button>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span class="tag green" style="font-size: 10px; font-weight: 800;">BÔNUS LIBERADO</span>
+        <span class="tag lime" style="font-size: 10px;">${bonus.badge}</span>
+      </div>
+      <h1 style="font-size: 24px; font-weight: 800; color: var(--ink); margin-bottom: 6px;">${esc(bonus.title)}</h1>
+      <p style="font-size: 14px; color: var(--muted); line-height: 1.6; max-width: 800px;">
+        ${esc(bonus.summary)}
+      </p>
+    </div>
+
+    <!-- Player de Vídeo Demonstrativo -->
+    <div class="video-wrapper" style="margin-bottom: 26px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--card-shadow);">
+      <video controls playsinline preload="metadata" src="${bonus.video}" poster="${bonus.poster}" style="width: 100%; display: block;"></video>
+    </div>
+
+    <!-- Módulos e Etapas de Execução -->
+    <div style="margin-bottom: 24px;">
+      <h2 style="font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 14px;">Módulos & Passo a Passo de Execução</h2>
+
+      ${bonus.modules.map(m => `
+        <div class="bonus-module-card">
+          <div class="bonus-module-head">
+            <span class="bonus-module-num">MÓDULO 0${m.num} • ${m.duration}</span>
+          </div>
+          <h3 style="font-size: 16px; font-weight: 800; color: var(--ink); margin-bottom: 6px;">${esc(m.title)}</h3>
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 12px;">${esc(m.description)}</p>
+
+          <strong style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--green); display: block; margin-bottom: 6px;">
+            Passo a Passo:
+          </strong>
+          <ol class="bonus-step-list">
+            ${m.steps.map(s => `<li>${esc(s)}</li>`).join('')}
+          </ol>
+
+          ${m.keyPoints?.length ? `
+            <div class="bonus-keypoints">
+              <strong>💡 Pontos de Atenção & Segurança:</strong>
+              <ul style="margin: 6px 0 0 16px; padding: 0;">
+                ${m.keyPoints.map(kp => `<li style="margin-bottom: 4px;">${esc(kp)}</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+        </div>
+      `).join('')}
+    </div>
+
+    <div style="display: flex; justify-content: flex-start; margin-bottom: 30px;">
+      <button class="btn light" data-action="back-to-bonuses">
+        ← Voltar à Lista de Bônus
+      </button>
+    </div>
+  `;
+}
+
+function showBonusPreviewModal(bonusId) {
+  const bonus = BONUS_CATALOG[bonusId];
+  if (!bonus) return;
+  const status = getBonusStatus();
+
+  showModal(bonus.title, `
+    <div style="margin-bottom: 16px;">
+      <div style="position: relative; border-radius: var(--radius-md); overflow: hidden; margin-bottom: 14px; max-height: 200px;">
+        <img src="${bonus.poster}" alt="${esc(bonus.title)}" style="width: 100%; height: 200px; object-fit: cover;">
+        <span class="bonus-card-badge ${bonus.badgeColor}" style="top: 10px; left: 10px;">${bonus.badge}</span>
+      </div>
+
+      <p style="font-size: 13px; color: var(--ink); line-height: 1.6; margin-bottom: 14px;">
+        ${esc(bonus.summary)}
+      </p>
+
+      <h4 style="font-size: 13px; font-weight: 800; color: var(--green); margin-bottom: 8px;">O que você vai aprender neste bônus:</h4>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+        ${bonus.modules.map(m => `
+          <div style="background: var(--paper); padding: 10px 14px; border-radius: 8px; border-left: 3px solid var(--green);">
+            <strong style="font-size: 12px; display: block; color: var(--ink);">Módulo 0${m.num}: ${esc(m.title)} (${m.duration})</strong>
+            <small style="font-size: 11px; color: var(--muted);">${esc(m.description)}</small>
+          </div>
+        `).join('')}
+      </div>
+
+      ${status.chosenBonus ? `
+        <div style="background: #f7f9f6; padding: 12px; border-radius: 8px; text-align: center; font-size: 12px; color: var(--muted);">
+          Você já selecionou o bônus: <strong>${esc(status.chosenBonus.title)}</strong>.
+        </div>
+      ` : status.isUnlocked ? `
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px;">
+          <button class="btn light" data-action="close-modal">Fechar</button>
+          <button class="btn lime" data-action="choose-bonus" data-id="${bonus.id}">
+            ⭐ Quero Escolher Este Bônus
+          </button>
+        </div>
+      ` : `
+        <div style="background: var(--lime-soft); padding: 12px 16px; border-radius: 8px; border: 1px solid #cce29b; text-align: center;">
+          <span style="font-size: 12px; font-weight: 700; color: var(--green); display: block;">
+            🔒 Liberação Automática em 7 Dias
+          </span>
+          <small style="font-size: 11px; color: var(--muted);">
+            Faltam ${status.days} dias, ${status.hours} horas e ${status.mins} minutos para você poder selecionar este produto.
+          </small>
+        </div>
+      `}
+    </div>
+  `);
+}
+
+function showBonusChoiceConfirmationModal(bonusId) {
+  const bonus = BONUS_CATALOG[bonusId];
+  if (!bonus) return;
+
+  showModal('Confirmar Escolha de Bônus', `
+    <div style="text-align: center; padding: 10px 0 16px;">
+      <div style="font-size: 48px; margin-bottom: 12px;">${bonus.emoji}</div>
+      <h3 style="font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 6px;">
+        ${esc(bonus.title)}
+      </h3>
+      <p style="font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 18px;">
+        Você tem direito a <strong>apenas 1 bônus exclusivo</strong> de 7 dias. Ao confirmar a escolha de <strong>"${esc(bonus.shortTitle)}"</strong>, ele será desbloqueado de forma vitalícia e você <strong>não poderá escolher outro</strong>.
+      </p>
+
+      <div style="background: #fff8e6; border: 1px solid #fae19c; padding: 12px 16px; border-radius: 8px; font-size: 12px; color: #7a5806; margin-bottom: 22px; text-align: left;">
+        ⚠️ <strong>Atenção:</strong> Esta escolha é definitiva e será gravada no seu perfil.
+      </div>
+
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button class="btn light" data-action="close-modal" style="min-width: 120px;">
+          Voltar e Ver Outros
+        </button>
+        <button class="btn lime" data-action="confirm-choose-bonus" data-id="${bonus.id}" style="min-width: 180px; font-weight: 800;">
+          ✓ Confirmar Escolha Definitiva
+        </button>
+      </div>
+    </div>
+  `);
 }
 
 /* ========================================================
@@ -425,6 +830,9 @@ function homeView() {
         <img src="/assets/rotina.png" alt="Lara Castelli">
       </div>
     </div>
+
+    <!-- Bônus Especial de Boas-Vindas (7 Dias) -->
+    ${bonusCountdownBanner()}
 
     ${programConfig.enabled ? `<div class="program-entry"><a class="btn light" href="#programa">Abrir programa de 12 semanas ↗</a></div>` : ""}
     <!-- Indicadores Rápidos -->
@@ -646,8 +1054,18 @@ function trainingView() {
       `}
     </section>
 
+    <!-- Destaque: 5 Bônus Exclusivos de 7 Dias -->
+    <div style="margin-top: 36px; padding: 20px 24px; background: linear-gradient(135deg, #102d24 0%, #173b2f 100%); border-radius: var(--radius-lg); color: var(--white); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; border: 1px solid rgba(203,230,120,0.25);">
+      <div>
+        <span style="font-size: 10px; font-weight: 800; letter-spacing: 0.8px; color: var(--lime); text-transform: uppercase;">✦ BÔNUS DE BOAS-VINDAS (7 DIAS)</span>
+        <h3 style="font-size: 16px; font-weight: 800; margin: 3px 0; color: var(--white);">5 Super Bônus Exclusivos • Escolha 1 no 7º Dia</h3>
+        <p style="font-size: 12px; color: rgba(255,255,255,0.8); margin: 0;">Protocolo Vácuo Abdominal, SOS Anti-Flacidez, Glúteos 3D, Fim de Semana e Queima Turbo.</p>
+      </div>
+      <a href="#bonus" class="btn lime" style="font-size: 12px; padding: 10px 20px; font-weight: 800;">Ver os 5 Bônus ↗</a>
+    </div>
+
     <!-- Trilho de Bônus -->
-    <section class="netflix-rail" style="margin-top: 36px;">
+    <section class="netflix-rail" style="margin-top: 32px;">
       <div class="rail-head">
         <div>
           <h2>Aulas Bônus & Complementares</h2>
@@ -1269,21 +1687,37 @@ async function refreshAdmin() {
       <div class="card">
         <h3 style="margin-bottom: 16px;">Alunas Cadastradas (${users.length})</h3>
         <div style="display: flex; flex-direction: column; gap: 10px;">
-          ${users.map(u => `
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line);">
-              <div>
-                <strong>${esc(u.name)}</strong>
-                <small style="display: block; color: var(--muted);">${esc(u.email)} • ${u.role === 'admin' ? 'Administrador' : u.active ? 'Acesso Ativo' : 'Suspenso'}</small>
-              </div>
-              ${u.id !== user.id ? `
-                <div style="display: flex; gap: 8px;">
-                  <button class="btn light" style="font-size: 11px; min-height: 32px; padding: 6px 12px;" data-action="toggle-user" data-id="${u.id}" data-active="${u.active ? '1' : '0'}">
-                    ${u.active ? 'Suspender' : 'Ativar'}
-                  </button>
+          ${users.map(u => {
+            const daysPassed = u.created_at ? (Date.now() - new Date(u.created_at).getTime()) / (1000 * 60 * 60 * 24) : 0;
+            let bonusTag = '';
+            if (u.chosenBonus) {
+              bonusTag = `<span class="tag green" style="font-size: 10px; margin-top: 4px; display: inline-block;">🎁 Bônus: ${esc(u.chosenBonus.title.split(':')[0])}</span>`;
+            } else if (u.role !== 'admin') {
+              if (daysPassed >= 7) {
+                bonusTag = `<span class="tag lime" style="font-size: 10px; margin-top: 4px; display: inline-block;">✦ Bônus 7D: Liberado (Aguardando escolha)</span>`;
+              } else {
+                const daysRemaining = Math.max(1, Math.ceil(7 - daysPassed));
+                bonusTag = `<span class="tag muted" style="font-size: 10px; margin-top: 4px; display: inline-block;">⏳ Bônus 7D: em ${daysRemaining} dia(s)</span>`;
+              }
+            }
+
+            return `
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line);">
+                <div>
+                  <strong>${esc(u.name)}</strong>
+                  <small style="display: block; color: var(--muted);">${esc(u.email)} • ${u.role === 'admin' ? 'Administrador' : u.active ? 'Acesso Ativo' : 'Suspenso'}</small>
+                  ${bonusTag}
                 </div>
-              ` : ''}
-            </div>
-          `).join('')}
+                ${u.id !== user.id ? `
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn light" style="font-size: 11px; min-height: 32px; padding: 6px 12px;" data-action="toggle-user" data-id="${u.id}" data-active="${u.active ? '1' : '0'}">
+                      ${u.active ? 'Suspender' : 'Ativar'}
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
     `;
@@ -1407,6 +1841,60 @@ document.addEventListener('click', async event => {
         programConfig = { enabled: false }; programCatalogue = []; programLoaded = false;
         state = blankState();
         renderLogin();
+        break;
+
+      case 'open-bonus':
+        activeBonusTab = null;
+        location.hash = 'bonus';
+        break;
+
+      case 'back-to-bonuses':
+        activeBonusTab = null;
+        location.hash = 'bonus';
+        render();
+        break;
+
+      case 'preview-bonus':
+        showBonusPreviewModal(id);
+        break;
+
+      case 'choose-bonus':
+        showBonusChoiceConfirmationModal(id);
+        break;
+
+      case 'confirm-choose-bonus': {
+        const bonusId = id;
+        $('#modal').close();
+        try {
+          if (demo) {
+            const b = BONUS_CATALOG[bonusId];
+            const chosen = { id: bonusId, title: b?.title || bonusId, chosen_at: new Date().toISOString() };
+            state.chosenBonus = chosen;
+            sessionStorage.setItem('lara-demo-chosen-bonus', JSON.stringify(chosen));
+            toast('🎉 Bônus desbloqueado com sucesso!');
+            activeBonusTab = bonusId;
+            location.hash = 'bonus';
+            render();
+          } else {
+            const r = await api('/bonus/choose', 'POST', { bonusId });
+            if (r.ok) {
+              state.chosenBonus = r.chosenBonus;
+              toast('🎉 Bônus desbloqueado com sucesso!');
+              activeBonusTab = bonusId;
+              location.hash = 'bonus';
+              render();
+            }
+          }
+        } catch (err) {
+          toast(err.message || 'Não foi possível confirmar a escolha do bônus.');
+        }
+        break;
+      }
+
+      case 'open-chosen-bonus':
+        activeBonusTab = id || state.chosenBonus?.id;
+        location.hash = 'bonus';
+        render();
         break;
 
       case 'toggle-setup-form':
