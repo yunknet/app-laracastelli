@@ -344,7 +344,25 @@ app.use('/api', async (req, res, next) => {
         Date.now()
       );
       if (req.user) {
-        const bonusRow = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', req.user.id);
+        let bonusRow = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', req.user.id);
+        if (!bonusRow) {
+          const stateRow = await db.get('SELECT body FROM member_state WHERE user_id=?', req.user.id);
+          const state = JSON.parse(stateRow?.body || '{}');
+          if (state.chosenBonus && state.chosenBonus.id) {
+            const title = state.chosenBonus.title || state.chosenBonus.id;
+            const chosenAt = state.chosenBonus.chosen_at || new Date().toISOString();
+            try {
+              await db.run(
+                'INSERT INTO user_bonuses(user_id, bonus_id, title, chosen_at) VALUES(?, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING',
+                req.user.id,
+                state.chosenBonus.id,
+                title,
+                chosenAt
+              );
+              bonusRow = { bonus_id: state.chosenBonus.id, title, chosen_at: chosenAt };
+            } catch {}
+          }
+        }
         req.user.chosenBonus = bonusRow ? { id: bonusRow.bonus_id, title: bonusRow.title, chosen_at: bonusRow.chosen_at } : null;
       }
     }
@@ -426,7 +444,25 @@ app.post('/api/login', rateLimit({ windowMs: 15 * 60_000, limit: 15 }), async (r
     await db.run('DELETE FROM sessions WHERE expires<?', Date.now());
     const token = randomBytes(32).toString('hex');
     await db.run('INSERT INTO sessions(token, user_id, expires) VALUES(?,?,?)', digest(token), user.id, Date.now() + 7 * 86400000);
-    const bonusRow = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', user.id);
+    let bonusRow = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', user.id);
+    if (!bonusRow) {
+      const stateRow = await db.get('SELECT body FROM member_state WHERE user_id=?', user.id);
+      const state = JSON.parse(stateRow?.body || '{}');
+      if (state.chosenBonus && state.chosenBonus.id) {
+        const title = state.chosenBonus.title || state.chosenBonus.id;
+        const chosenAt = state.chosenBonus.chosen_at || new Date().toISOString();
+        try {
+          await db.run(
+            'INSERT INTO user_bonuses(user_id, bonus_id, title, chosen_at) VALUES(?, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING',
+            user.id,
+            state.chosenBonus.id,
+            title,
+            chosenAt
+          );
+          bonusRow = { bonus_id: state.chosenBonus.id, title, chosen_at: chosenAt };
+        } catch {}
+      }
+    }
     const chosenBonus = bonusRow ? { id: bonusRow.bonus_id, title: bonusRow.title, chosen_at: bonusRow.chosen_at } : null;
     res.cookie('lara_session', token, {
       httpOnly: true,
@@ -586,7 +622,26 @@ app.get('/api/bonus/content/:id', auth, async (req, res, next) => {
     // Acesso permitido se for administradora OU se a aluna escolheu este bônus
     let allowed = req.user.role === 'admin';
     if (!allowed) {
-      const chosen = await db.get('SELECT bonus_id FROM user_bonuses WHERE user_id=? AND bonus_id=?', req.user.id, bonusId);
+      let chosen = await db.get('SELECT bonus_id FROM user_bonuses WHERE user_id=? AND bonus_id=?', req.user.id, bonusId);
+      if (!chosen) {
+        // Fallback e auto-migração: confere escolhas gravadas no member_state da versão anterior
+        const stateRow = await db.get('SELECT body FROM member_state WHERE user_id=?', req.user.id);
+        const state = JSON.parse(stateRow?.body || '{}');
+        if (state.chosenBonus && state.chosenBonus.id === bonusId) {
+          const title = state.chosenBonus.title || bonus.title;
+          const chosenAt = state.chosenBonus.chosen_at || new Date().toISOString();
+          try {
+            await db.run(
+              'INSERT INTO user_bonuses(user_id, bonus_id, title, chosen_at) VALUES(?, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING',
+              req.user.id,
+              bonusId,
+              title,
+              chosenAt
+            );
+            chosen = { bonus_id: bonusId };
+          } catch {}
+        }
+      }
       if (chosen) allowed = true;
     }
 

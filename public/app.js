@@ -62,6 +62,15 @@ let bonusTimerInterval = null;
 const bonusContentCache = {};
 let activeBonusModule = 1;
 let loadingBonusContent = false;
+
+function clearBonusSessionState() {
+  for (const k in bonusContentCache) {
+    delete bonusContentCache[k];
+  }
+  activeBonusTab = null;
+  activeBonusModule = 1;
+  loadingBonusContent = false;
+}
 let page = 'home';
 let activeWorkoutId = null;
 let activeLessonTab = 'pratica'; // 'instrucoes' ou 'pratica'
@@ -335,6 +344,7 @@ function pageTitle() {
 }
 
 function renderLogin() {
+  clearBonusSessionState();
   $('#app').innerHTML = `
     <div class="login">
       <section class="login-art">
@@ -550,8 +560,11 @@ function bonusView() {
   const bonuses = Object.values(BONUS_CATALOG);
 
   // Se a aluna estiver com a aba de conteúdo ativa de um bônus escolhido (ou admin)
-  if (activeBonusTab && (status.chosenBonus?.id === activeBonusTab || status.isUnlocked)) {
+  if (activeBonusTab && (status.chosenBonus?.id === activeBonusTab || user?.role === 'admin' || demo)) {
     return bonusContentView(activeBonusTab);
+  }
+  if (activeBonusTab && status.chosenBonus?.id !== activeBonusTab && user?.role !== 'admin' && !demo) {
+    activeBonusTab = null;
   }
 
   return `
@@ -691,7 +704,8 @@ function bonusContentView(bonusId) {
     return renderFullBonusContent(demoBonus);
   }
 
-  const cached = bonusContentCache[bonusId];
+  const cacheKey = `${user?.id || (demo ? 'demo' : 'anon')}:${bonusId}`;
+  const cached = bonusContentCache[cacheKey];
   if (cached && !cached.error) {
     return renderFullBonusContent(cached);
   }
@@ -719,12 +733,12 @@ function bonusContentView(bonusId) {
     api('/bonus/content/' + bonusId)
       .then(res => {
         loadingBonusContent = false;
-        bonusContentCache[bonusId] = res.bonus;
+        bonusContentCache[cacheKey] = res.bonus;
         render();
       })
       .catch(err => {
         loadingBonusContent = false;
-        bonusContentCache[bonusId] = { error: err.message || 'Você não tem acesso a este conteúdo de bônus.' };
+        bonusContentCache[cacheKey] = { error: err.message || 'Você não tem acesso a este conteúdo de bônus.' };
         render();
       });
   }
@@ -1929,6 +1943,7 @@ document.addEventListener('click', async event => {
         render(); toast(index >= 0 ? 'Conclusão desfeita.' : 'Treino do programa registrado.'); break;
       }
       case 'demo':
+        clearBonusSessionState();
         programConfig = { enabled: false }; programCatalogue = []; programLoaded = false;
         demo = true;
         sessionStorage.setItem('lara-demo', '1');
@@ -1939,6 +1954,7 @@ document.addEventListener('click', async event => {
 
       case 'logout':
         if (!demo) await api('/logout', 'POST', {});
+        clearBonusSessionState();
         demo = false;
         sessionStorage.removeItem('lara-demo');
         user = null;
@@ -2313,6 +2329,7 @@ document.addEventListener('submit', async event => {
       }
       case 'login': {
         const r = await api('/login', 'POST', data);
+        clearBonusSessionState();
         user = r.user;
         demo = false;
         sessionStorage.removeItem('lara-demo');

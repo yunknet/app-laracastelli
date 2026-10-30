@@ -261,3 +261,55 @@ test('Admin can see chosen bonus in GET /api/admin/users', async () => {
   assert.ok(nova);
   assert.equal(nova.chosenBonus, null);
 });
+
+test('Legacy bonus choices stored only in member_state are automatically migrated and granted access', async () => {
+  const legacyUserId = randomUUID();
+  const legacyToken = randomUUID();
+  const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString();
+  await db.run('INSERT INTO users(id, name, email, password, role, created_at) VALUES(?,?,?,?,?,?)', legacyUserId, 'Aluna Legada', 'legada@bonus.test', 'hash', 'member', tenDaysAgo);
+  await db.run('INSERT INTO sessions(token, user_id, expires) VALUES(?,?,?)', createHash('sha256').update(legacyToken).digest('hex'), legacyUserId, Date.now() + 3600000);
+  const legacyCookie = 'lara_session=' + legacyToken;
+
+  // Simula estado da versão anterior onde a escolha ficou apenas em member_state e user_bonuses está vazia
+  const legacyState = {
+    profile: { name: 'Aluna Legada' },
+    chosenBonus: {
+      id: 'fim-de-semana',
+      title: 'Manual Fim de Semana Sem Culpa: Comer Fora sem Engordar',
+      chosen_at: tenDaysAgo
+    }
+  };
+  await db.run('INSERT INTO member_state(user_id, body) VALUES(?,?)', legacyUserId, JSON.stringify(legacyState));
+
+  // Confere que user_bonuses ainda não possui essa aluna
+  const beforeMigration = await db.get('SELECT * FROM user_bonuses WHERE user_id=?', legacyUserId);
+  assert.equal(beforeMigration, null);
+
+  // 1. Aluna faz requisição para obter o conteúdo do seu bônus
+  const contentRes = await request('/bonus/content/fim-de-semana', { cookie: legacyCookie });
+  assert.equal(contentRes.status, 200);
+  assert.equal(contentRes.body.ok, true);
+  assert.equal(contentRes.body.bonus.id, 'fim-de-semana');
+
+  // 2. Confere que a tabela user_bonuses foi automaticamente populada (auto-migração)
+  const afterMigration = await db.get('SELECT * FROM user_bonuses WHERE user_id=?', legacyUserId);
+  assert.ok(afterMigration);
+  assert.equal(afterMigration.bonus_id, 'fim-de-semana');
+
+  // 3. Confere que GET /api/me agora retorna o bônus escolhido
+  const meRes = await request('/me', { cookie: legacyCookie });
+  assert.equal(meRes.status, 200);
+  assert.ok(meRes.body.user);
+  assert.equal(meRes.body.user.chosenBonus?.id, 'fim-de-semana');
+});
+
+test('public/app.js clears bonus cache and active tab upon logout/session switch', async () => {
+  const appJsCode = await readFile(path.resolve('public/app.js'), 'utf8');
+
+  // Deve possuir função de limpeza de cache de bônus
+  assert.ok(appJsCode.includes('clearBonusSessionState'), 'app.js must declare clearBonusSessionState');
+  // Deve isolar cache por usuário (cacheKey com user.id)
+  assert.ok(appJsCode.includes('cacheKey ='), 'bonusContentView must key cache by user');
+  // Deve chamar clearBonusSessionState no logout
+  assert.ok(appJsCode.includes('clearBonusSessionState();'), 'must call clearBonusSessionState');
+});

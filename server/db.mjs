@@ -223,6 +223,30 @@ export async function initDb() {
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
     `);
   }
+  await migrateLegacyBonuses();
+}
+
+export async function migrateLegacyBonuses() {
+  try {
+    const rows = await db.all("SELECT user_id, body FROM member_state WHERE body LIKE '%chosenBonus%'");
+    for (const row of rows) {
+      try {
+        const state = JSON.parse(row.body || '{}');
+        if (state.chosenBonus && state.chosenBonus.id) {
+          const bonusId = String(state.chosenBonus.id).trim();
+          const title = String(state.chosenBonus.title || state.chosenBonus.id).trim();
+          const chosenAt = state.chosenBonus.chosen_at || new Date().toISOString();
+          await db.run(
+            'INSERT INTO user_bonuses (user_id, bonus_id, title, chosen_at) VALUES (?, ?, ?, ?) ON CONFLICT (user_id) DO NOTHING',
+            row.user_id,
+            bonusId,
+            title,
+            chosenAt
+          );
+        }
+      } catch {}
+    }
+  } catch {}
 }
 
 export async function passwordHash(password) {
