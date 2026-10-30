@@ -10,6 +10,7 @@ import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { db, initDb, mediaRoot, passwordHash, passwordMatches } from './db.mjs';
 import { registerTrainingProgram, isProgramWorkoutId } from './training-program.mjs';
+import { BONUS_FULL_CONTENT } from './bonus-content.mjs';
 
 const app = express(), production = process.env.NODE_ENV === 'production';
 const origin = process.env.APP_ORIGIN || 'http://localhost:5190';
@@ -342,6 +343,10 @@ app.use('/api', async (req, res, next) => {
         digest(token),
         Date.now()
       );
+      if (req.user) {
+        const bonusRow = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', req.user.id);
+        req.user.chosenBonus = bonusRow ? { id: bonusRow.bonus_id, title: bonusRow.title, chosen_at: bonusRow.chosen_at } : null;
+      }
     }
     next();
   } catch (err) {
@@ -421,13 +426,15 @@ app.post('/api/login', rateLimit({ windowMs: 15 * 60_000, limit: 15 }), async (r
     await db.run('DELETE FROM sessions WHERE expires<?', Date.now());
     const token = randomBytes(32).toString('hex');
     await db.run('INSERT INTO sessions(token, user_id, expires) VALUES(?,?,?)', digest(token), user.id, Date.now() + 7 * 86400000);
+    const bonusRow = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', user.id);
+    const chosenBonus = bonusRow ? { id: bonusRow.bonus_id, title: bonusRow.title, chosen_at: bonusRow.chosen_at } : null;
     res.cookie('lara_session', token, {
       httpOnly: true,
       secure: production,
       sameSite: 'lax',
       maxAge: 7 * 86400000,
       path: '/'
-    }).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, created_at: user.created_at } });
+    }).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, created_at: user.created_at, chosenBonus } });
   } catch (err) {
     next(err);
   }
@@ -465,17 +472,20 @@ app.put('/api/state', auth, async (req, res, next) => {
   try {
     const data = req.body;
     if (!data || Array.isArray(data) || typeof data !== 'object') return fail(res, 'Dados inválidos.');
-    const allowed = ['profile', 'completed', 'water', 'checkins', 'favorites', 'shopping', 'read', 'schedule', 'exerciseChecks', 'videoPositions', 'meals', 'applications', 'symptoms', 'supplements', 'chosenBonus'];
+    
+    // O bônus nunca pode ser definido, forjado ou sobrescrito pelo cliente via PUT /api/state
+    delete data.chosenBonus;
+
+    const allowed = ['profile', 'completed', 'water', 'checkins', 'favorites', 'shopping', 'read', 'schedule', 'exerciseChecks', 'videoPositions', 'meals', 'applications', 'symptoms', 'supplements'];
     if (Object.keys(data).some(k => !allowed.includes(k))) return fail(res, 'Campo não permitido.');
     const arrayFields = ['completed', 'checkins', 'favorites', 'shopping', 'read', 'meals', 'applications', 'symptoms', 'supplements'];
     if (arrayFields.some(k => data[k] !== undefined && !Array.isArray(data[k]))) return fail(res, 'Lista inválida.');
-    if (['profile', 'water', 'schedule', 'exerciseChecks', 'videoPositions', 'chosenBonus'].some(k => data[k] !== undefined && (!data[k] || Array.isArray(data[k]) || typeof data[k] !== 'object'))) return fail(res, 'Registro inválido.');
+    if (['profile', 'water', 'schedule', 'exerciseChecks', 'videoPositions'].some(k => data[k] !== undefined && (!data[k] || Array.isArray(data[k]) || typeof data[k] !== 'object'))) return fail(res, 'Registro inválido.');
     
-    // Se a aluna já tiver um bônus escolhido gravado, impede a alteração arbitrária via put
-    const existingRow = await db.get('SELECT body FROM member_state WHERE user_id=?', req.user.id);
-    const existingState = JSON.parse(existingRow?.body || '{}');
-    if (existingState.chosenBonus && existingState.chosenBonus.id) {
-      data.chosenBonus = existingState.chosenBonus;
+    // Preserva exclusivamente a escolha gravada no servidor na tabela atômica user_bonuses
+    const bonusRow = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', req.user.id);
+    if (bonusRow) {
+      data.chosenBonus = { id: bonusRow.bonus_id, title: bonusRow.title, chosen_at: bonusRow.chosen_at };
     }
 
     await db.run('INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET body=EXCLUDED.body', req.user.id, JSON.stringify(data));
@@ -485,7 +495,7 @@ app.put('/api/state', auth, async (req, res, next) => {
   }
 });
 
-// Endpoint seguro para escolha única do bônus de 7 dias
+// Endpoint atômico e seguro para escolha única do bônus de 7 dias
 app.post('/api/bonus/choose', auth, async (req, res, next) => {
   try {
     const bonusId = text(req.body?.bonusId, 50);
@@ -500,14 +510,12 @@ app.post('/api/bonus/choose', auth, async (req, res, next) => {
       return fail(res, 'Bônus inválido ou não encontrado.');
     }
 
-    const row = await db.get('SELECT body FROM member_state WHERE user_id=?', req.user.id);
-    const state = JSON.parse(row?.body || '{}');
-
-    // Regra: Escolha única e permanente
-    if (state.chosenBonus && state.chosenBonus.id) {
+    // Regra: Escolha única e permanente (consulta atômica da tabela user_bonuses)
+    const existingBonus = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', req.user.id);
+    if (existingBonus) {
       return res.status(400).json({
-        error: `Você já escolheu o seu bônus de 7 dias (${state.chosenBonus.title}). A escolha é única e definitiva.`,
-        chosenBonus: state.chosenBonus
+        error: `Você já escolheu o seu bônus de 7 dias (${existingBonus.title}). A escolha é única e definitiva.`,
+        chosenBonus: { id: existingBonus.bonus_id, title: existingBonus.title, chosen_at: existingBonus.chosen_at }
       });
     }
 
@@ -529,16 +537,64 @@ app.post('/api/bonus/choose', auth, async (req, res, next) => {
       title: validBonuses[bonusId],
       chosen_at: new Date().toISOString()
     };
-    state.chosenBonus = chosenBonus;
 
-    await db.run(
-      'INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET body=EXCLUDED.body',
-      req.user.id,
-      JSON.stringify(state)
-    );
+    // Gravação atômica: chave primária user_id impede duplicatas concorrentes em PostgreSQL e SQLite
+    try {
+      await db.run(
+        'INSERT INTO user_bonuses(user_id, bonus_id, title, chosen_at) VALUES(?, ?, ?, ?)',
+        req.user.id,
+        bonusId,
+        chosenBonus.title,
+        chosenBonus.chosen_at
+      );
+    } catch (insertErr) {
+      const raceBonus = await db.get('SELECT bonus_id, title, chosen_at FROM user_bonuses WHERE user_id=?', req.user.id);
+      return res.status(400).json({
+        error: `Você já escolheu o seu bônus de 7 dias (${raceBonus?.title || 'Bônus'}). A escolha é única e definitiva.`,
+        chosenBonus: raceBonus ? { id: raceBonus.bonus_id, title: raceBonus.title, chosen_at: raceBonus.chosen_at } : null
+      });
+    }
+
+    // Sincroniza em member_state para compatibilidade com interfaces legadas
+    try {
+      const row = await db.get('SELECT body FROM member_state WHERE user_id=?', req.user.id);
+      const state = JSON.parse(row?.body || '{}');
+      state.chosenBonus = chosenBonus;
+      await db.run(
+        'INSERT INTO member_state(user_id, body) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET body=EXCLUDED.body',
+        req.user.id,
+        JSON.stringify(state)
+      );
+    } catch {}
 
     console.log(`[Bônus 7 Dias] Aluna ${req.user.email} escolheu: ${chosenBonus.title}`);
     res.json({ ok: true, chosenBonus });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Endpoint protegido para entregar o conteúdo completo e aulas do bônus
+app.get('/api/bonus/content/:id', auth, async (req, res, next) => {
+  try {
+    const bonusId = text(req.params.id, 50);
+    const bonus = BONUS_FULL_CONTENT[bonusId];
+    if (!bonus) {
+      return res.status(404).json({ error: 'Bônus não encontrado.' });
+    }
+
+    // Acesso permitido se for administradora OU se a aluna escolheu este bônus
+    let allowed = req.user.role === 'admin';
+    if (!allowed) {
+      const chosen = await db.get('SELECT bonus_id FROM user_bonuses WHERE user_id=? AND bonus_id=?', req.user.id, bonusId);
+      if (chosen) allowed = true;
+    }
+
+    if (!allowed) {
+      return res.status(403).json({ error: 'Você não tem acesso a este conteúdo de bônus.' });
+    }
+
+    res.json({ ok: true, bonus });
   } catch (err) {
     next(err);
   }
@@ -697,17 +753,24 @@ app.put('/api/tickets/:id', auth, admin, async (req, res, next) => {
 app.get('/api/admin/users', auth, admin, async (req, res, next) => {
   try {
     const rows = await db.all(`
-      SELECT u.id, u.name, u.email, u.role, u.active, u.created_at, m.body AS state_body
+      SELECT u.id, u.name, u.email, u.role, u.active, u.created_at,
+             ub.bonus_id, ub.title AS bonus_title, ub.chosen_at,
+             m.body AS state_body
       FROM users u
+      LEFT JOIN user_bonuses ub ON ub.user_id = u.id
       LEFT JOIN member_state m ON m.user_id = u.id
       ORDER BY u.created_at DESC
     `);
     const users = rows.map(u => {
       let chosenBonus = null;
-      try {
-        const parsed = JSON.parse(u.state_body || '{}');
-        chosenBonus = parsed.chosenBonus || null;
-      } catch {}
+      if (u.bonus_id) {
+        chosenBonus = { id: u.bonus_id, title: u.bonus_title, chosen_at: u.chosen_at };
+      } else {
+        try {
+          const parsed = JSON.parse(u.state_body || '{}');
+          chosenBonus = parsed.chosenBonus || null;
+        } catch {}
+      }
       return {
         id: u.id,
         name: u.name,

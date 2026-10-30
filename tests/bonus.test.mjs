@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
@@ -97,6 +97,27 @@ test('POST /api/bonus/choose rejects selection before 7 days for new member', as
   assert.ok(res.body.daysRemaining >= 1);
 });
 
+test('PUT /api/state rejects/strips chosenBonus, preventing unauthorized early unlock', async () => {
+  // Aluna nova tenta falsificar a liberação enviando chosenBonus via PUT /api/state
+  const spoofRes = await request('/state', {
+    method: 'PUT',
+    cookie: newMemberCookie,
+    body: {
+      profile: { name: 'Aluna Nova', goal: 'Emagrecer' },
+      chosenBonus: { id: 'cintura-vacuo', title: 'Hacked Before 7 Days' }
+    }
+  });
+  assert.equal(spoofRes.status, 200);
+
+  // Confere que no banco e no GET /api/state o chosenBonus NÃO foi gravado
+  const stateRes = await request('/state', { cookie: newMemberCookie });
+  assert.equal(stateRes.body.chosenBonus, undefined);
+
+  // Confere que na tabela user_bonuses não há registro
+  const userBonusRow = await db.get('SELECT * FROM user_bonuses WHERE user_id=?', newMemberId);
+  assert.equal(userBonusRow, null);
+});
+
 test('POST /api/bonus/choose validates bonusId strictly', async () => {
   const res = await request('/bonus/choose', {
     method: 'POST',
@@ -107,7 +128,7 @@ test('POST /api/bonus/choose validates bonusId strictly', async () => {
   assert.match(res.body.error, /bônus inválido/i);
 });
 
-test('POST /api/bonus/choose allows selection for member after 7 days', async () => {
+test('POST /api/bonus/choose allows selection for member after 7 days and records in user_bonuses atomically', async () => {
   const res = await request('/bonus/choose', {
     method: 'POST',
     cookie: oldMemberCookie,
@@ -118,9 +139,10 @@ test('POST /api/bonus/choose allows selection for member after 7 days', async ()
   assert.equal(res.body.chosenBonus.id, 'cintura-vacuo');
   assert.match(res.body.chosenBonus.title, /Protocolo Cintura Fina/i);
 
-  // Verifica persistência no member_state
-  const stateRes = await request('/state', { cookie: oldMemberCookie });
-  assert.equal(stateRes.body.chosenBonus.id, 'cintura-vacuo');
+  // Confere gravação na tabela atômica user_bonuses
+  const dbBonus = await db.get('SELECT * FROM user_bonuses WHERE user_id=?', oldMemberId);
+  assert.ok(dbBonus);
+  assert.equal(dbBonus.bonus_id, 'cintura-vacuo');
 });
 
 test('POST /api/bonus/choose blocks second bonus selection (single-choice rule)', async () => {
@@ -134,7 +156,30 @@ test('POST /api/bonus/choose blocks second bonus selection (single-choice rule)'
   assert.equal(secondTry.body.chosenBonus.id, 'cintura-vacuo');
 });
 
-test('PUT /api/state preserves chosenBonus preventing client-side overwrite tampering', async () => {
+test('POST /api/bonus/choose handles concurrent duplicate requests atomically', async () => {
+  const concurrentMemberId = randomUUID();
+  const concurrentToken = randomUUID();
+  const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString();
+  await db.run('INSERT INTO users(id, name, email, password, role, created_at) VALUES(?,?,?,?,?,?)', concurrentMemberId, 'Aluna Concorrente', 'concorrente@bonus.test', 'hash', 'member', tenDaysAgo);
+  await db.run('INSERT INTO sessions(token, user_id, expires) VALUES(?,?,?)', createHash('sha256').update(concurrentToken).digest('hex'), concurrentMemberId, Date.now() + 3600000);
+  const concurrentCookie = 'lara_session=' + concurrentToken;
+
+  // Dispara 2 requisições no exato mesmo instante com bônus diferentes
+  const [res1, res2] = await Promise.all([
+    request('/bonus/choose', { method: 'POST', cookie: concurrentCookie, body: { bonusId: 'gluteos-3d' } }),
+    request('/bonus/choose', { method: 'POST', cookie: concurrentCookie, body: { bonusId: 'queima-acelerada' } })
+  ]);
+
+  // Exatamente uma teve sucesso (200) e a outra foi bloqueada atomicamente (400)
+  const statuses = [res1.status, res2.status].sort();
+  assert.deepEqual(statuses, [200, 400]);
+
+  // Apenas 1 registro existe no banco de dados para esse usuário
+  const dbRows = await db.all('SELECT * FROM user_bonuses WHERE user_id=?', concurrentMemberId);
+  assert.equal(dbRows.length, 1);
+});
+
+test('PUT /api/state preserves server chosenBonus preventing client-side overwrite tampering', async () => {
   // Aluna tenta sobrescrever chosenBonus enviando outro id via PUT /api/state
   const tamperRes = await request('/state', {
     method: 'PUT',
@@ -148,6 +193,58 @@ test('PUT /api/state preserves chosenBonus preventing client-side overwrite tamp
   // Verifica que o original cintura-vacuo permaneceu intacto
   const stateRes = await request('/state', { cookie: oldMemberCookie });
   assert.equal(stateRes.body.chosenBonus.id, 'cintura-vacuo');
+});
+
+test('GET /api/bonus/content/:id requires authentication and checks user selection', async () => {
+  // 1. Sem autenticação -> 401
+  const unauthRes = await request('/bonus/content/cintura-vacuo');
+  assert.equal(unauthRes.status, 401);
+
+  // 2. Aluna que não escolheu esse bônus -> 403
+  const forbiddenRes = await request('/bonus/content/cintura-vacuo', { cookie: newMemberCookie });
+  assert.equal(forbiddenRes.status, 403);
+  assert.match(forbiddenRes.body.error, /você não tem acesso/i);
+
+  // 3. Aluna que escolheu cintura-vacuo tenta acessar gluteos-3d -> 403
+  const wrongBonusRes = await request('/bonus/content/gluteos-3d', { cookie: oldMemberCookie });
+  assert.equal(wrongBonusRes.status, 403);
+
+  // 4. Aluna que escolheu cintura-vacuo acessa cintura-vacuo -> 200 com conteúdo e módulos completos
+  const allowedRes = await request('/bonus/content/cintura-vacuo', { cookie: oldMemberCookie });
+  assert.equal(allowedRes.status, 200);
+  assert.equal(allowedRes.body.ok, true);
+  assert.equal(allowedRes.body.bonus.id, 'cintura-vacuo');
+  assert.ok(Array.isArray(allowedRes.body.bonus.modules));
+  assert.equal(allowedRes.body.bonus.modules.length, 4);
+  assert.ok(allowedRes.body.bonus.modules[0].video.includes('.mp4'));
+  assert.ok(allowedRes.body.bonus.modules[0].steps.length > 0);
+
+  // 5. Administrador acessa qualquer bônus -> 200
+  const adminRes = await request('/bonus/content/anti-flacidez', { cookie: adminCookie });
+  assert.equal(adminRes.status, 200);
+  assert.equal(adminRes.body.bonus.id, 'anti-flacidez');
+});
+
+test('Public bonus-data.js does not leak video files, steps or keyPoints', async () => {
+  const publicDataPath = path.resolve('public/bonus-data.js');
+  const code = await readFile(publicDataPath, 'utf8');
+
+  // Não pode expor caminhos de vídeos de aulas protegidas
+  assert.equal(code.includes('.mp4'), false, 'public/bonus-data.js must not contain video URLs');
+  // Não pode expor o array com os passos de execução confidenciais
+  assert.equal(code.includes('steps:'), false, 'public/bonus-data.js must not contain confidential steps');
+  // Não pode expor pontos de atenção internos
+  assert.equal(code.includes('keyPoints:'), false, 'public/bonus-data.js must not contain confidential keyPoints');
+});
+
+test('Poster for fim-de-semana uses existing asset without 404', async () => {
+  const publicDataPath = path.resolve('public/bonus-data.js');
+  const code = await readFile(publicDataPath, 'utf8');
+
+  // Não pode referenciar receita-poster-1.jpg que não existe
+  assert.equal(code.includes('receita-poster-1.jpg'), false);
+  // Deve apontar para imagem válida existente
+  assert.ok(code.includes('/assets/rotina.png') || code.includes('treino-poster'));
 });
 
 test('Admin can see chosen bonus in GET /api/admin/users', async () => {

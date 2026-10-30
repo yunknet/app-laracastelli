@@ -59,6 +59,9 @@ let photos = [];
 let pipMode = 'iniciante'; // 'iniciante' ou 'avancado'
 let activeBonusTab = null;
 let bonusTimerInterval = null;
+const bonusContentCache = {};
+let activeBonusModule = 1;
+let loadingBonusContent = false;
 let page = 'home';
 let activeWorkoutId = null;
 let activeLessonTab = 'pratica'; // 'instrucoes' ou 'pratica'
@@ -423,7 +426,7 @@ function getBonusStatus() {
   const remainingMs = Math.max(0, unlockTime - now);
   // Aluna elegível no 7º dia; administradores têm prévia irrestrita para testes
   const isUnlocked = remainingMs <= 0 || user?.role === 'admin' || (demo && sessionStorage.getItem('lara-demo-unlocked') === '1');
-  const chosenBonus = state.chosenBonus || (demo ? JSON.parse(sessionStorage.getItem('lara-demo-chosen-bonus') || 'null') : null);
+  const chosenBonus = user?.chosenBonus || state.chosenBonus || (demo ? JSON.parse(sessionStorage.getItem('lara-demo-chosen-bonus') || 'null') : null);
 
   const days = Math.floor(remainingMs / (1000 * 60 * 60 * 24));
   const hours = Math.floor((remainingMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -524,7 +527,7 @@ function bonusCountdownBanner() {
           <p class="bonus-banner-sub">Após sua 1ª semana de adaptação, você poderá escolher 1 conteúdo premium definitivo.</p>
         </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+      <div class="bonus-banner-right" style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
         <div class="bonus-countdown-digits bonus-timer-countdown">
           <div class="cd-box"><span class="cd-val td-days">${String(status.days).padStart(2, '0')}</span><span class="cd-lbl">Dias</span></div>
           <span class="cd-sep">:</span>
@@ -660,10 +663,70 @@ function bonusView() {
 }
 
 function bonusContentView(bonusId) {
-  const bonus = BONUS_CATALOG[bonusId];
-  if (!bonus) {
+  const meta = BONUS_CATALOG[bonusId];
+  if (!meta) {
     activeBonusTab = null;
     return bonusView();
+  }
+
+  if (demo) {
+    const demoBonus = {
+      ...meta,
+      video: '/assets/treino-video-1.mp4',
+      modules: (meta.modulePreviews || []).map((p, idx) => ({
+        ...p,
+        description: `Aula prática com metodologia exclusiva de ${meta.category}.`,
+        video: `/assets/treino-video-${(idx % 4) + 1}.mp4`,
+        poster: meta.poster,
+        steps: [
+          'Passo 1: Aquecimento e alinhamento postural.',
+          'Passo 2: Execução do movimento com técnica correta e cadência controlada.',
+          'Passo 3: Finalização e checklist prático de retenção.'
+        ],
+        keyPoints: [
+          'Mantenha a respiração contínua e a concentração no músculo-alvo.'
+        ]
+      }))
+    };
+    return renderFullBonusContent(demoBonus);
+  }
+
+  const cached = bonusContentCache[bonusId];
+  if (cached && !cached.error) {
+    return renderFullBonusContent(cached);
+  }
+
+  if (cached && cached.error) {
+    return `
+      <div style="margin-bottom: 20px;">
+        <button class="btn light small" data-action="back-to-bonuses" style="margin-bottom: 14px;">
+          ← Voltar aos Bônus
+        </button>
+      </div>
+      <div class="card" style="text-align: center; padding: 40px 20px; background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--card-shadow);">
+        <div style="font-size: 40px; margin-bottom: 12px;">🔒</div>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--ink); margin-bottom: 8px;">Acesso Restrito ao Conteúdo</h2>
+        <p style="font-size: 14px; color: var(--muted); margin-bottom: 20px; max-width: 500px; margin-inline: auto;">
+          ${esc(cached.error)}
+        </p>
+        <button class="btn green" data-action="back-to-bonuses">Voltar à Lista de Bônus</button>
+      </div>
+    `;
+  }
+
+  if (!loadingBonusContent) {
+    loadingBonusContent = true;
+    api('/bonus/content/' + bonusId)
+      .then(res => {
+        loadingBonusContent = false;
+        bonusContentCache[bonusId] = res.bonus;
+        render();
+      })
+      .catch(err => {
+        loadingBonusContent = false;
+        bonusContentCache[bonusId] = { error: err.message || 'Você não tem acesso a este conteúdo de bônus.' };
+        render();
+      });
   }
 
   return `
@@ -671,10 +734,29 @@ function bonusContentView(bonusId) {
       <button class="btn light small" data-action="back-to-bonuses" style="margin-bottom: 14px;">
         ← Voltar aos Bônus
       </button>
+    </div>
+    <div class="card" style="text-align: center; padding: 50px 20px; background: var(--white); border-radius: var(--radius-lg);">
+      <div style="font-size: 32px; margin-bottom: 12px;">⏳</div>
+      <h3 style="font-size: 16px; font-weight: 800; color: var(--ink); margin-bottom: 6px;">Carregando suas aulas exclusivas...</h3>
+      <p style="font-size: 13px; color: var(--muted);">Validando acesso seguro ao bônus selecionado.</p>
+    </div>
+  `;
+}
 
-      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+function renderFullBonusContent(bonus) {
+  const currentModule = (bonus.modules || []).find(m => m.num === activeBonusModule) || (bonus.modules && bonus.modules[0]) || {};
+  const currentVideo = currentModule.video || bonus.video || '/assets/treino-video-1.mp4';
+  const currentPoster = currentModule.poster || bonus.poster || '/assets/treino-poster-1.jpg';
+
+  return `
+    <div style="margin-bottom: 20px;">
+      <button class="btn light small" data-action="back-to-bonuses" style="margin-bottom: 14px;">
+        ← Voltar aos Bônus
+      </button>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;">
         <span class="tag green" style="font-size: 10px; font-weight: 800;">BÔNUS LIBERADO</span>
-        <span class="tag lime" style="font-size: 10px;">${bonus.badge}</span>
+        <span class="tag lime" style="font-size: 10px;">${bonus.badge || 'Exclusivo'}</span>
       </div>
       <h1 style="font-size: 24px; font-weight: 800; color: var(--ink); margin-bottom: 6px;">${esc(bonus.title)}</h1>
       <p style="font-size: 14px; color: var(--muted); line-height: 1.6; max-width: 800px;">
@@ -682,19 +764,42 @@ function bonusContentView(bonusId) {
       </p>
     </div>
 
-    <!-- Player de Vídeo Demonstrativo -->
-    <div class="video-wrapper" style="margin-bottom: 26px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--card-shadow);">
-      <video controls playsinline preload="metadata" src="${bonus.video}" poster="${bonus.poster}" style="width: 100%; display: block;"></video>
+    <!-- Barra e Player de Vídeo com Navegação de Aulas -->
+    <div id="bonus-player-container" style="margin-bottom: 28px;">
+      <div id="bonus-active-indicator" style="background: var(--paper); border: 1px solid var(--line); border-bottom: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+        <div>
+          <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--green);">
+            ▶ Reproduzindo Agora:
+          </span>
+          <strong id="bonus-active-module-title" style="font-size: 14px; font-weight: 800; color: var(--ink); display: block; margin-top: 2px;">
+            Módulo 0${currentModule.num || 1}: ${esc(currentModule.title || bonus.title)}
+          </strong>
+        </div>
+        ${currentModule.duration ? `<span class="tag green" style="font-size: 11px;">Duração: ${esc(currentModule.duration)}</span>` : ''}
+      </div>
+
+      <div class="video-wrapper" style="border-radius: 0 0 var(--radius-lg) var(--radius-lg); overflow: hidden; box-shadow: var(--card-shadow); border: 1px solid var(--line);">
+        <video id="bonus-video-player" controls playsinline preload="metadata" src="${currentVideo}" poster="${currentPoster}" style="width: 100%; display: block;"></video>
+      </div>
     </div>
 
     <!-- Módulos e Etapas de Execução -->
     <div style="margin-bottom: 24px;">
       <h2 style="font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 14px;">Módulos & Passo a Passo de Execução</h2>
 
-      ${bonus.modules.map(m => `
-        <div class="bonus-module-card">
+      ${(bonus.modules || []).map(m => `
+        <div class="bonus-module-card ${m.num === activeBonusModule ? 'active-module' : ''}" id="bonus-module-card-${m.num}">
           <div class="bonus-module-head">
             <span class="bonus-module-num">MÓDULO 0${m.num} • ${m.duration}</span>
+            <button class="btn ${m.num === activeBonusModule ? 'green' : 'secondary'} small"
+                    data-action="play-bonus-module"
+                    data-module="${m.num}"
+                    data-video="${esc(m.video || bonus.video)}"
+                    data-title="${esc(m.title)}"
+                    data-duration="${esc(m.duration)}"
+                    data-poster="${esc(m.poster || bonus.poster)}">
+              ${m.num === activeBonusModule ? '✓ Assistindo Agora' : '▶ Assistir Esta Aula'}
+            </button>
           </div>
           <h3 style="font-size: 16px; font-weight: 800; color: var(--ink); margin-bottom: 6px;">${esc(m.title)}</h3>
           <p style="font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 12px;">${esc(m.description)}</p>
@@ -703,7 +808,7 @@ function bonusContentView(bonusId) {
             Passo a Passo:
           </strong>
           <ol class="bonus-step-list">
-            ${m.steps.map(s => `<li>${esc(s)}</li>`).join('')}
+            ${(m.steps || []).map(s => `<li>${esc(s)}</li>`).join('')}
           </ol>
 
           ${m.keyPoints?.length ? `
@@ -742,12 +847,11 @@ function showBonusPreviewModal(bonusId) {
         ${esc(bonus.summary)}
       </p>
 
-      <h4 style="font-size: 13px; font-weight: 800; color: var(--green); margin-bottom: 8px;">O que você vai aprender neste bônus:</h4>
+      <h4 style="font-size: 13px; font-weight: 800; color: var(--green); margin-bottom: 8px;">Aulas incluídas neste bônus:</h4>
       <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
-        ${bonus.modules.map(m => `
+        ${(bonus.modulePreviews || []).map(m => `
           <div style="background: var(--paper); padding: 10px 14px; border-radius: 8px; border-left: 3px solid var(--green);">
             <strong style="font-size: 12px; display: block; color: var(--ink);">Módulo 0${m.num}: ${esc(m.title)} (${m.duration})</strong>
-            <small style="font-size: 11px; color: var(--muted);">${esc(m.description)}</small>
           </div>
         `).join('')}
       </div>
@@ -757,7 +861,7 @@ function showBonusPreviewModal(bonusId) {
           Você já selecionou o bônus: <strong>${esc(status.chosenBonus.title)}</strong>.
         </div>
       ` : status.isUnlocked ? `
-        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px;">
+        <div class="modal-actions-stacked" style="margin-top: 14px;">
           <button class="btn light" data-action="close-modal">Fechar</button>
           <button class="btn lime" data-action="choose-bonus" data-id="${bonus.id}">
             ⭐ Quero Escolher Este Bônus
@@ -795,11 +899,11 @@ function showBonusChoiceConfirmationModal(bonusId) {
         ⚠️ <strong>Atenção:</strong> Esta escolha é definitiva e será gravada no seu perfil.
       </div>
 
-      <div style="display: flex; gap: 12px; justify-content: center;">
-        <button class="btn light" data-action="close-modal" style="min-width: 120px;">
+      <div class="modal-actions-stacked">
+        <button class="btn light" data-action="close-modal">
           Voltar e Ver Outros
         </button>
-        <button class="btn lime" data-action="confirm-choose-bonus" data-id="${bonus.id}" style="min-width: 180px; font-weight: 800;">
+        <button class="btn lime" data-action="confirm-choose-bonus" data-id="${bonus.id}" style="font-weight: 800;">
           ✓ Confirmar Escolha Definitiva
         </button>
       </div>
@@ -1879,6 +1983,7 @@ document.addEventListener('click', async event => {
             const r = await api('/bonus/choose', 'POST', { bonusId });
             if (r.ok) {
               state.chosenBonus = r.chosenBonus;
+              if (user) user.chosenBonus = r.chosenBonus;
               toast('🎉 Bônus desbloqueado com sucesso!');
               activeBonusTab = bonusId;
               location.hash = 'bonus';
@@ -1896,6 +2001,47 @@ document.addEventListener('click', async event => {
         location.hash = 'bonus';
         render();
         break;
+
+      case 'play-bonus-module': {
+        const modNum = parseInt(b.dataset.module, 10);
+        const videoSrc = b.dataset.video;
+        const title = b.dataset.title;
+        const poster = b.dataset.poster;
+
+        activeBonusModule = modNum;
+
+        const player = document.getElementById('bonus-video-player');
+        const titleEl = document.getElementById('bonus-active-module-title');
+        if (player && videoSrc) {
+          player.src = videoSrc;
+          if (poster) player.poster = poster;
+          player.load();
+          player.play().catch(() => {});
+        }
+        if (titleEl && title) {
+          titleEl.textContent = `Módulo 0${modNum}: ${title}`;
+        }
+
+        document.querySelectorAll('.bonus-module-card').forEach(card => card.classList.remove('active-module'));
+        const activeCard = document.getElementById(`bonus-module-card-${modNum}`);
+        if (activeCard) activeCard.classList.add('active-module');
+
+        document.querySelectorAll('[data-action="play-bonus-module"]').forEach(btnEl => {
+          if (parseInt(btnEl.dataset.module, 10) === modNum) {
+            btnEl.className = 'btn green small';
+            btnEl.innerHTML = '✓ Assistindo Agora';
+          } else {
+            btnEl.className = 'btn secondary small';
+            btnEl.innerHTML = '▶ Assistir Esta Aula';
+          }
+        });
+
+        const playerWrap = document.getElementById('bonus-active-indicator') || player;
+        if (playerWrap) {
+          playerWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        break;
+      }
 
       case 'toggle-setup-form':
         showSetupForm = !showSetupForm;

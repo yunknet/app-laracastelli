@@ -1364,8 +1364,8 @@ dialog::backdrop { background: rgba(15, 33, 26, 0.7); backdrop-filter: blur(4px)
   display: flex;
   align-items: center;
   gap: 16px;
-  flex: 1;
-  min-width: 260px;
+  flex: 1 1 220px;
+  min-width: 0;
 }
 .bonus-banner-icon {
   width: 48px;
@@ -1437,7 +1437,7 @@ dialog::backdrop { background: rgba(15, 33, 26, 0.7); backdrop-filter: blur(4px)
 
 .bonus-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 22px;
   margin-bottom: 30px;
 }
@@ -1618,6 +1618,27 @@ dialog::backdrop { background: rgba(15, 33, 26, 0.7); backdrop-filter: blur(4px)
   color: var(--ink);
 }
 
+.bonus-module-card.active-module {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(23, 59, 47, 0.15);
+  background: #fbfdfa;
+}
+
+.modal-actions-stacked {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.modal-actions-stacked .btn {
+  flex: 1 1 140px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 @media (max-width: 768px) {
   .bonus-countdown-banner {
     padding: 18px;
@@ -1625,5 +1646,76 @@ dialog::backdrop { background: rgba(15, 33, 26, 0.7); backdrop-filter: blur(4px)
   .bonus-grid {
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  dialog {
+    width: calc(100% - 16px) !important;
+    max-width: 100% !important;
+  }
+  .modal-head {
+    padding: 12px 14px !important;
+  }
+  .modal-body {
+    padding: 14px 12px !important;
+  }
+  .modal-actions-stacked {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .modal-actions-stacked .btn {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: none !important;
+  }
+
+  .bonus-countdown-banner {
+    padding: 14px 12px !important;
+    gap: 12px !important;
+  }
+  .bonus-banner-left {
+    min-width: 0 !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+  .bonus-banner-icon {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 18px !important;
+  }
+  .bonus-banner-title {
+    font-size: 14px !important;
+  }
+  .bonus-banner-sub {
+    font-size: 11px !important;
+  }
+  .bonus-banner-right {
+    width: 100% !important;
+    justify-content: center !important;
+    gap: 8px !important;
+  }
+  .bonus-countdown-digits {
+    width: 100% !important;
+    justify-content: center !important;
+    gap: 4px !important;
+  }
+  .cd-box {
+    min-width: 34px !important;
+    padding: 4px 4px !important;
+  }
+  .cd-val {
+    font-size: 14px !important;
+  }
+  .cd-lbl {
+    font-size: 7px !important;
+  }
+  .cd-sep {
+    font-size: 12px !important;
+  }
+  .bonus-banner-right .btn {
+    width: 100% !important;
+    text-align: center !important;
+    justify-content: center !important;
   }
 }
